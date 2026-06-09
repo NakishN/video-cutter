@@ -1,166 +1,148 @@
 @echo off
 chcp 65001 >nul 2>&1
 title Нарезчик видео
+cd /d "%~dp0"
 
-:: Размер окна
-mode con cols=65 lines=35 >nul 2>&1
-
-set "DIR=%~dp0"
-cd /d "%DIR%"
-
-goto :main
-
-:: ══════════════════════════════════════════
-:print_header
-cls
+echo ================================================
+echo   Нарезчик видео - запуск
+echo ================================================
 echo.
-echo  ┌─────────────────────────────────────────────┐
-echo  │          🎬  Нарезчик видео                 │
-echo  │     Twitch / YouTube → транскрипция         │
-echo  └─────────────────────────────────────────────┘
-echo.
-goto :eof
 
-:: ══════════════════════════════════════════
-:main
-call :print_header
+:: Пишем лог чтобы видеть ошибки
+set "LOG=%~dp0error_log.txt"
+echo [%date% %time%] Запуск > "%LOG%"
 
-:: ── 1. Проверяем Python ─────────────────
+:: ── 1. Python ────────────────────────────────────
+echo [1] Проверка Python...
+python --version >> "%LOG%" 2>&1
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo  ❌  Python не найден!
     echo.
-    echo  Нужен Python 3.11 или новее.
-    echo  Открываем страницу загрузки...
+    echo  ОШИБКА: Python не найден!
+    echo.
+    echo  Скачайте Python 3.11 с https://www.python.org/downloads/
+    echo  При установке обязательно поставьте галочку:
+    echo  "Add Python to PATH"
+    echo.
+    echo  После установки запустите этот файл снова.
     echo.
     start "" "https://www.python.org/downloads/"
-    echo  После установки Python:
-    echo   • Поставьте галочку "Add Python to PATH"
-    echo   • Закройте это окно
-    echo   • Запустите Запустить.bat снова
-    echo.
+    echo [ERROR] Python not found >> "%LOG%"
     pause
-    exit /b
+    exit /b 1
 )
+echo  Python найден - OK
+echo [OK] Python found >> "%LOG%"
 
-:: ── 2. Первый запуск: создаём окружение ─
-if not exist "venv\Scripts\python.exe" (
-    call :print_header
-    echo  ⏳  Первый запуск — установка компонентов...
-    echo      (займёт 2-5 минут, интернет нужен)
+:: ── 2. Виртуальное окружение ─────────────────────
+if exist "venv\Scripts\python.exe" goto :deps_ok
+
+echo.
+echo [2] Первый запуск - создание окружения...
+echo     (займёт 2-5 минут)
+echo.
+
+python -m venv venv >> "%LOG%" 2>&1
+if errorlevel 1 (
     echo.
-
-    echo  [1/2] Создание окружения Python...
-    python -m venv venv >nul 2>&1
-    if errorlevel 1 (
-        echo.
-        echo  ❌  Не удалось создать виртуальное окружение.
-        echo.
-        echo  Попробуйте:
-        echo   • Запустить от имени Администратора
-        echo   • Переустановить Python с сайта python.org
-        echo.
-        pause
-        exit /b
-    )
-
-    echo  [2/2] Загрузка и установка пакетов...
-    echo      (faster-whisper, ffmpeg, uvicorn...)
+    echo  ОШИБКА: не удалось создать venv.
+    echo  Попробуйте запустить от имени Администратора.
+    echo  Подробности в файле: error_log.txt
     echo.
-    call venv\Scripts\pip install --upgrade pip -q --no-warn-script-location
-    call venv\Scripts\pip install -r requirements.txt -q --no-warn-script-location
-    if errorlevel 1 (
-        echo.
-        echo  ❌  Ошибка установки пакетов.
-        echo.
-        echo  Возможные причины:
-        echo   • Нет подключения к интернету
-        echo   • Антивирус блокирует pip
-        echo   • Мало места на диске (нужно ~2 ГБ)
-        echo.
-        echo  Попробуйте запустить снова или
-        echo  отключите антивирус на время установки.
-        echo.
-        :: Удаляем неполное окружение, чтобы при след. запуске повторить
-        rmdir /s /q venv >nul 2>&1
-        pause
-        exit /b
-    )
-
-    call :print_header
-    echo  ✅  Компоненты установлены!
-    echo.
+    echo [ERROR] venv creation failed >> "%LOG%"
+    pause
+    exit /b 1
 )
+echo  Окружение создано - OK
+echo [OK] venv created >> "%LOG%"
 
-:: ── 3. Проверяем .env и GEN_API_KEY ─────
+echo.
+echo [3] Установка пакетов (faster-whisper, ffmpeg, uvicorn...)
+echo     Это займёт несколько минут, ждите...
+echo.
+
+venv\Scripts\pip install --upgrade pip >> "%LOG%" 2>&1
+venv\Scripts\pip install -r requirements.txt >> "%LOG%" 2>&1
+if errorlevel 1 (
+    echo.
+    echo  ОШИБКА: не удалось установить пакеты.
+    echo.
+    echo  Возможные причины:
+    echo  - Нет интернета
+    echo  - Антивирус блокирует pip
+    echo  - Мало места на диске (нужно ~2 ГБ)
+    echo.
+    echo  Подробности в файле: error_log.txt
+    echo.
+    echo [ERROR] pip install failed >> "%LOG%"
+    rmdir /s /q venv >nul 2>&1
+    pause
+    exit /b 1
+)
+echo  Пакеты установлены - OK
+echo [OK] packages installed >> "%LOG%"
+
+:deps_ok
+
+:: ── 3. Файл .env ─────────────────────────────────
 if not exist ".env" (
     if exist ".env.example" (
         copy ".env.example" ".env" >nul 2>&1
     ) else (
-        echo GEN_API_KEY=> .env
+        echo GEN_API_KEY=> ".env"
     )
 )
 
-:: Ищем рабочий ключ (начинается с sk-)
-findstr /r /c:"GEN_API_KEY=sk-" ".env" >nul 2>&1
+findstr "GEN_API_KEY=sk-" ".env" >nul 2>&1
 if errorlevel 1 (
-    call :print_header
-    echo  🔑  Нужен API-ключ для анализа видео.
     echo.
-    echo  Получите бесплатный ключ на сайте:
-    echo  https://gen-api.ru
+    echo ================================================
+    echo   Нужен API-ключ с сайта gen-api.ru
+    echo ================================================
     echo.
-    echo  1. Зарегистрируйтесь (есть пробный баланс)
+    echo  1. Зарегистрируйтесь на https://gen-api.ru
     echo  2. Скопируйте ключ (начинается с sk-...)
-    echo  3. Вставьте в файл .env который откроется
-    echo.
-    echo  Открываем сайт и файл настроек...
+    echo  3. Вставьте в файл .env который сейчас откроется
+    echo     Строка: GEN_API_KEY=sk-ваш-ключ
+    echo  4. Сохраните файл (Ctrl+S) и закройте блокнот
+    echo  5. Нажмите любую клавишу здесь
     echo.
     start "" "https://gen-api.ru"
     timeout /t 2 >nul
     notepad ".env"
     echo.
-    echo  Сохраните .env (Ctrl+S в блокноте),
-    echo  затем нажмите любую клавишу...
-    echo.
+    echo  Нажмите любую клавишу для продолжения...
     pause >nul
-
-    :: Повторная проверка
-    findstr /r /c:"GEN_API_KEY=sk-" ".env" >nul 2>&1
-    if errorlevel 1 (
-        echo.
-        echo  ⚠️   Ключ не найден в .env.
-        echo  Транскрипция будет работать,
-        echo  но анализ моментов — нет.
-        echo.
-        timeout /t 3 >nul
-    )
 )
 
-:: ── 4. Запускаем! ────────────────────────
-call :print_header
-echo  🚀  Запуск сервера...
+:: ── 4. Запуск ─────────────────────────────────────
 echo.
-echo  ┌─────────────────────────────────────────────┐
-echo  │  Адрес:  http://127.0.0.1:8000             │
-echo  │                                             │
-echo  │  Браузер откроется автоматически.           │
-echo  │  Закройте это окно — сервер остановится.   │
-echo  └─────────────────────────────────────────────┘
+echo ================================================
+echo   Запуск сервера...
+echo   Адрес: http://127.0.0.1:8000
+echo   Закройте это окно чтобы остановить.
+echo ================================================
 echo.
-echo  (При первой транскрипции скачается модель
-echo   Whisper ~1.5 ГБ — это нормально, один раз)
+echo   ВАЖНО: при первой транскрипции автоматически
+echo   скачается модель Whisper (~1.5 ГБ) - это нормально!
 echo.
+echo [OK] Starting server >> "%LOG%"
 
-:: Открываем браузер через 3 секунды
-start "" /b powershell -WindowStyle Hidden -Command ^
-    "Start-Sleep 3; Start-Process 'http://127.0.0.1:8000'" >nul 2>&1
+:: Открываем браузер через 3 сек
+powershell -WindowStyle Hidden -Command "Start-Sleep 3; Start-Process 'http://127.0.0.1:8000'" >nul 2>&1
 
-:: Запускаем сервер
-call venv\Scripts\python launcher.py
+venv\Scripts\python launcher.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+    echo.
+    echo  Сервер завершился с ошибкой.
+    echo  Подробности в файле: error_log.txt
+    echo.
+    echo  Содержимое лога:
+    echo  ----------------
+    type "%LOG%"
+    echo.
+)
 
-:: Сервер остановлен
 echo.
-echo  Сервер остановлен.
-echo  Нажмите любую клавишу для выхода...
+echo  Сервер остановлен. Нажмите любую клавишу...
 pause >nul
