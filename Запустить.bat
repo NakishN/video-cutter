@@ -1,90 +1,79 @@
 @echo off
-chcp 65001 >nul 2>&1
-title Нарезчик видео
 cd /d "%~dp0"
+set "LOG=%~dp0error_log.txt"
+echo [%date% %time%] Start > "%LOG%"
 
-echo ================================================
-echo   Нарезчик видео - запуск
-echo ================================================
+echo.
+echo  ================================================
+echo   Video Cutter - Starting...
+echo  ================================================
 echo.
 
-:: Пишем лог чтобы видеть ошибки
-set "LOG=%~dp0error_log.txt"
-echo [%date% %time%] Запуск > "%LOG%"
-
-:: ── 1. Python ────────────────────────────────────
-echo [1] Проверка Python...
-python --version >> "%LOG%" 2>&1
+:: -- Check Python --
 python --version >nul 2>&1
 if errorlevel 1 (
+    echo  [ERROR] Python not found!
     echo.
-    echo  ОШИБКА: Python не найден!
+    echo  Download Python 3.11 from:
+    echo  https://www.python.org/downloads/
     echo.
-    echo  Скачайте Python 3.11 с https://www.python.org/downloads/
-    echo  При установке обязательно поставьте галочку:
-    echo  "Add Python to PATH"
-    echo.
-    echo  После установки запустите этот файл снова.
+    echo  IMPORTANT: check "Add Python to PATH"
+    echo  Then run this file again.
     echo.
     start "" "https://www.python.org/downloads/"
     echo [ERROR] Python not found >> "%LOG%"
     pause
     exit /b 1
 )
-echo  Python найден - OK
-echo [OK] Python found >> "%LOG%"
+echo  [OK] Python found
+echo [OK] Python >> "%LOG%"
 
-:: ── 2. Виртуальное окружение ─────────────────────
-if exist "venv\Scripts\python.exe" goto :deps_ok
+:: -- Create venv if needed --
+if exist "venv\Scripts\python.exe" goto :install_ok
 
 echo.
-echo [2] Первый запуск - создание окружения...
-echo     (займёт 2-5 минут)
+echo  [SETUP] First run - installing packages...
+echo  This will take 2-5 minutes. Please wait.
 echo.
 
 python -m venv venv >> "%LOG%" 2>&1
 if errorlevel 1 (
     echo.
-    echo  ОШИБКА: не удалось создать venv.
-    echo  Попробуйте запустить от имени Администратора.
-    echo  Подробности в файле: error_log.txt
-    echo.
-    echo [ERROR] venv creation failed >> "%LOG%"
+    echo  [ERROR] Failed to create venv.
+    echo  Try running as Administrator.
+    echo  See error_log.txt for details.
+    echo [ERROR] venv failed >> "%LOG%"
     pause
     exit /b 1
 )
-echo  Окружение создано - OK
+echo  [OK] Virtual environment created
 echo [OK] venv created >> "%LOG%"
 
-echo.
-echo [3] Установка пакетов (faster-whisper, ffmpeg, uvicorn...)
-echo     Это займёт несколько минут, ждите...
-echo.
-
-venv\Scripts\pip install --upgrade pip >> "%LOG%" 2>&1
-venv\Scripts\pip install -r requirements.txt >> "%LOG%" 2>&1
+echo  [SETUP] Installing: faster-whisper, ffmpeg, uvicorn...
+venv\Scripts\pip install --upgrade pip -q >> "%LOG%" 2>&1
+venv\Scripts\pip install -r requirements.txt -q >> "%LOG%" 2>&1
 if errorlevel 1 (
     echo.
-    echo  ОШИБКА: не удалось установить пакеты.
+    echo  [ERROR] Package installation failed!
     echo.
-    echo  Возможные причины:
-    echo  - Нет интернета
-    echo  - Антивирус блокирует pip
-    echo  - Мало места на диске (нужно ~2 ГБ)
+    echo  Possible reasons:
+    echo  - No internet connection
+    echo  - Antivirus blocking pip
+    echo  - Not enough disk space (need ~2 GB)
     echo.
-    echo  Подробности в файле: error_log.txt
+    echo  See error_log.txt for details.
     echo.
     echo [ERROR] pip install failed >> "%LOG%"
     rmdir /s /q venv >nul 2>&1
     pause
     exit /b 1
 )
-echo  Пакеты установлены - OK
+echo  [OK] All packages installed
 echo [OK] packages installed >> "%LOG%"
 
-:deps_ok
+:install_ok
 
-:: ── 3. Файл .env ─────────────────────────────────
+:: -- Check .env --
 if not exist ".env" (
     if exist ".env.example" (
         copy ".env.example" ".env" >nul 2>&1
@@ -96,53 +85,47 @@ if not exist ".env" (
 findstr "GEN_API_KEY=sk-" ".env" >nul 2>&1
 if errorlevel 1 (
     echo.
-    echo ================================================
-    echo   Нужен API-ключ с сайта gen-api.ru
-    echo ================================================
+    echo  ================================================
+    echo   API key required from gen-api.ru
+    echo  ================================================
     echo.
-    echo  1. Зарегистрируйтесь на https://gen-api.ru
-    echo  2. Скопируйте ключ (начинается с sk-...)
-    echo  3. Вставьте в файл .env который сейчас откроется
-    echo     Строка: GEN_API_KEY=sk-ваш-ключ
-    echo  4. Сохраните файл (Ctrl+S) и закройте блокнот
-    echo  5. Нажмите любую клавишу здесь
+    echo  1. Register at https://gen-api.ru
+    echo  2. Copy your key (starts with sk-...)
+    echo  3. Paste into .env file: GEN_API_KEY=sk-...
+    echo  4. Save .env (Ctrl+S) and close Notepad
+    echo  5. Press any key here to continue
     echo.
     start "" "https://gen-api.ru"
     timeout /t 2 >nul
     notepad ".env"
     echo.
-    echo  Нажмите любую клавишу для продолжения...
-    pause >nul
+    pause
 )
 
-:: ── 4. Запуск ─────────────────────────────────────
+:: -- Start server --
 echo.
-echo ================================================
-echo   Запуск сервера...
-echo   Адрес: http://127.0.0.1:8000
-echo   Закройте это окно чтобы остановить.
-echo ================================================
+echo  ================================================
+echo   Server starting at http://127.0.0.1:8000
+echo   Opening browser in 3 seconds...
+echo   Close this window to stop the server.
+echo  ================================================
 echo.
-echo   ВАЖНО: при первой транскрипции автоматически
-echo   скачается модель Whisper (~1.5 ГБ) - это нормально!
+echo  NOTE: First transcription will download
+echo  Whisper model (~1.5 GB) automatically.
 echo.
 echo [OK] Starting server >> "%LOG%"
 
-:: Открываем браузер через 3 сек
-powershell -WindowStyle Hidden -Command "Start-Sleep 3; Start-Process 'http://127.0.0.1:8000'" >nul 2>&1
+powershell -WindowStyle Hidden -Command "Start-Sleep 3; Start-Process 'http://127.0.0.1:8000'"
 
-venv\Scripts\python launcher.py >> "%LOG%" 2>&1
+venv\Scripts\python launcher.py
 if errorlevel 1 (
     echo.
-    echo  Сервер завершился с ошибкой.
-    echo  Подробности в файле: error_log.txt
+    echo  [ERROR] Server crashed. See error_log.txt
     echo.
-    echo  Содержимое лога:
-    echo  ----------------
     type "%LOG%"
     echo.
 )
 
 echo.
-echo  Сервер остановлен. Нажмите любую клавишу...
+echo  Server stopped. Press any key to exit...
 pause >nul
