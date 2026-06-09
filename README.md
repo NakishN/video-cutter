@@ -1,106 +1,292 @@
-# 📹 Твич‑нарезка: автоматическая транскрипция, ключевые фрагменты и резюме
+# 🎬 Нарезчик видео
 
-## 📦 О проекте
-Это автономное локальное веб‑приложение, которое позволяет:
-1. **Скачивать** Twitch‑VOD (или работать с уже скачанными файлами).
-2. **Транскрибировать** речь полностью с помощью **Whisper‑GGML** (GPU‑ускорение).
-3. **Извлекать ключевые фрагменты** и **генерировать краткое резюме** при помощи локальной LLM (Llama 2 13 B GGML).
-4. **Отображать** результаты в стильном тёмном UI с анимациями и spinner‑индикатором.
+Автоматическая транскрипция Twitch-VOD и YouTube-видео с выделением ключевых моментов.
 
-Все зависимости ставятся без внешних API‑ключей, работа происходит полностью офлайн.
+**Как работает:**
+1. Загружаете видео или вставляете ссылку на Twitch/YouTube
+2. [Whisper](https://github.com/ggerganov/whisper.cpp) транскрибирует речь локально (без интернета)
+3. [GenAPI](https://gen-api.ru) (GPT-4.1 или Gemini) находит самые интересные моменты и выдаёт список с таймкодами
+4. Скачиваете готовый текст
 
 ---
 
-## 📋 Требования
-| Требование | Минимум | Рекомендация |
-|------------|--------|--------------|
-| ОС | Linux (Ubuntu/Debian) | — |
-| Python | 3.9+ | — |
-| ОЗУ | 8 GB | 16 GB+ для `whisper‑medium` + LLM |
-| GPU | CUDA‑совместимая видеокарта (не менее 4 GB VRAM) – **опционально**, но сильно ускоряет Whisper и LLM |
-| Дисковое пространство | ~10 GB для моделей | — |
+## 🪟 Windows — запуск .exe
 
-## 📦 Установка системных зависимостей
-```bash
-# Обновляем пакеты
-sudo apt-get update
+### Шаг 1 — Скачайте проект
 
-# Устанавливаем ffmpeg (для извлечения аудио) и yt-dlp (скачивает Twitch/VOD)
-sudo apt-get install -y ffmpeg yt-dlp
+Нажмите зелёную кнопку **Code → Download ZIP** на этой странице, распакуйте архив в любую папку.
+
+### Шаг 2 — Установите Python
+
+Скачайте Python 3.11+ с [python.org](https://www.python.org/downloads/).
+
+> ⚠️ При установке обязательно поставьте галочку **«Add Python to PATH»**
+
+### Шаг 3 — Запустите установку зависимостей
+
+Откройте папку проекта, дважды кликните на файл:
+
+```
+setup_windows.bat
 ```
 
-## 🐍 Настройка Python‑окружения
+Скрипт автоматически скачает (~1.5 ГБ, займёт несколько минут):
+- `ffmpeg.exe` — обработка аудио
+- `whisper.exe` — распознавание речи
+- `models/ggml-medium.bin` — языковая модель Whisper
+
+### Шаг 4 — Добавьте API-ключ
+
+В папке проекта откройте файл `.env` (блокнотом или любым редактором) и вставьте ключ:
+
+```
+GEN_API_KEY=sk-ваш-ключ
+```
+
+Ключ получите на [gen-api.ru](https://gen-api.ru) (регистрация бесплатная, есть пробный баланс).
+
+### Шаг 5 — Соберите .exe
+
+Дважды кликните:
+
+```
+build_windows.bat
+```
+
+Сборка займёт 1–3 минуты. Готовый дистрибутив появится в папке:
+
+```
+dist\НарезчикВидео\
+```
+
+### Шаг 6 — Запускайте
+
+```
+dist\НарезчикВидео\НарезчикВидео.exe
+```
+
+Откроется консольное окно и автоматически браузер на `http://127.0.0.1:8000`.
+
+> 💡 Закройте консольное окно — сервер остановится.
+
+### Структура папки после сборки
+
+```
+dist/НарезчикВидео/
+├── НарезчикВидео.exe   ← запускать это
+├── whisper.exe          ← транскрипция (не удалять)
+├── ffmpeg.exe           ← аудио (не удалять)
+├── ffprobe.exe          ← аудио (не удалять)
+├── .env                 ← ключ GenAPI (не удалять)
+├── models/
+│   └── ggml-medium.bin  ← модель ~1.5 ГБ (не удалять)
+├── videos/              ← загруженные видео
+└── output/              ← транскрипты и резюме
+```
+
+### Возможные проблемы (Windows)
+
+| Проблема | Решение |
+|---|---|
+| «Python не найден» | Переустановите Python с галочкой «Add to PATH» |
+| «ffmpeg не скачался» | Скачайте вручную с [ffmpeg.org](https://ffmpeg.org/download.html), положите `ffmpeg.exe` в папку проекта |
+| «whisper не скачался» | Скачайте с [github.com/ggerganov/whisper.cpp/releases](https://github.com/ggerganov/whisper.cpp/releases), переименуйте в `whisper.exe` |
+| Антивирус блокирует .exe | Добавьте папку `dist\НарезчикВидео\` в исключения |
+| Браузер не открылся | Откройте вручную: `http://127.0.0.1:8000` |
+
+---
+
+## 🐧 Linux — локальный запуск
+
+### Требования
+
+- Ubuntu 20.04+ / Debian 11+ / любой Linux
+- Python 3.9+
+- ffmpeg
+- CUDA (опционально, для ускорения Whisper)
+
+### Шаг 1 — Системные зависимости
+
 ```bash
-# Создаём и активируем venv
+sudo apt-get update
+sudo apt-get install -y ffmpeg zip wget git cmake make g++ libopenblas-dev
+```
+
+### Шаг 2 — Скачайте проект
+
+```bash
+git clone https://github.com/NakishN/video-cutter.git
+cd video-cutter
+```
+
+### Шаг 3 — Python-окружение
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
-
-# Устанавливаем зависимости (uvicorn с optional‑зависимостями)
-pip install fastapi "uvicorn[standard]" pydantic tqdm
+pip install -r requirements.txt
 ```
-> **Ошибка *Missing dependencies for SOCKS support*** обычно появляется, если `uvicorn` установлен без optional‑зависимостей. Установка `uvicorn[standard]` решит проблему.
 
-## 🤖 Установка моделей
-1. **Whisper‑GGML** (для GPU):
-   ```bash
-   mkdir -p models
-   cd models
-   wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin -O ggml-medium.bin
-   ```
-   (Можно выбрать `tiny`, `base`, `small` – меняйте `ggml-medium.bin` в `config.json`.)
-2. **LLM (Llama‑2 13 B GGML Q4_0)**:
-   ```bash
-   wget https://huggingface.co/TheBloke/Llama-2-13B-GGML/resolve/main/llama-2-13b.ggmlv3.q4_0.bin -O llama-2-13b-ggml-q4_0.bin
-   ```
-   Положите файл в `models/`.
+### Шаг 4 — Скомпилируйте Whisper
 
-## ⚙️ Конфигурация (`config.json`)
+```bash
+cd whisper.cpp
+cmake -B build -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS
+cmake --build build --config Release -j$(nproc)
+cp build/bin/whisper-cli ../whisper
+cd ..
+```
+
+> Если есть NVIDIA GPU:
+> ```bash
+> cmake -B build -DGGML_CUDA=ON
+> cmake --build build --config Release -j$(nproc)
+> cp build/bin/whisper-cli ../whisper-cuda
+> ```
+> И поставьте `"use_gpu": true` в `config.json`.
+
+### Шаг 5 — Скачайте модель Whisper
+
+```bash
+mkdir -p models
+wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin \
+     -O models/ggml-medium.bin
+```
+
+Альтернативные модели (меньше = быстрее, но хуже качество):
+
+| Модель | Размер | Качество | Скорость (CPU) |
+|---|---|---|---|
+| `ggml-tiny.bin` | 75 МБ | низкое | ~2 мин/час видео |
+| `ggml-base.bin` | 142 МБ | среднее | ~5 мин/час видео |
+| `ggml-small.bin` | 466 МБ | хорошее | ~10 мин/час видео |
+| `ggml-medium.bin` | 1.5 ГБ | **отличное** | ~20 мин/час видео |
+
+### Шаг 6 — Настройте .env
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Вставьте ключ:
+```
+GEN_API_KEY=sk-ваш-ключ
+```
+
+### Шаг 7 — Запуск
+
+```bash
+bash start.sh
+```
+
+Откройте в браузере: `http://localhost:8000`
+
+---
+
+## 🌐 Linux — деплой на VPS (Docker)
+
+Подходит если хотите использовать сервис круглосуточно из браузера с любого устройства.
+
+### Требования к серверу
+
+| | Минимум | Рекомендуется |
+|---|---|---|
+| CPU | 2 ядра | 4 ядра |
+| RAM | 4 ГБ | 8 ГБ |
+| Диск | 10 ГБ | 20 ГБ |
+| ОС | Ubuntu 22.04 | Ubuntu 22.04 |
+
+**Стоимость:** ~1 000–1 500 ₽/мес (Selectel, Timeweb, Hetzner).
+
+### Деплой одной командой
+
+Скопируйте проект на сервер и выполните:
+
+```bash
+# С вашей локальной машины — копируем проект на сервер
+scp -r /путь/к/video-cutter user@IP_СЕРВЕРА:/opt/video-cutter
+
+# Подключаемся к серверу
+ssh user@IP_СЕРВЕРА
+
+# Запускаем деплой
+cd /opt/video-cutter
+GEN_API_KEY=sk-ваш-ключ sudo -E bash deploy.sh
+```
+
+Скрипт сам:
+- Установит Docker
+- Скачает модель Whisper (~1.5 ГБ)
+- Соберёт Docker-образ (5–10 мин при первом запуске)
+- Запустит контейнер
+- Проверит работоспособность
+
+После запуска приложение доступно по адресу: `http://IP_СЕРВЕРА:8000`
+
+### Управление контейнером
+
+```bash
+# Посмотреть статус
+docker compose ps
+
+# Посмотреть логи
+docker compose logs -f
+
+# Перезапустить
+docker compose restart
+
+# Остановить
+docker compose down
+
+# Обновить после изменений в коде
+docker compose up -d --build
+```
+
+### Возможные проблемы (Linux / Docker)
+
+| Проблема | Решение |
+|---|---|
+| `GEN_API_KEY не задан` | Отредактируйте `/opt/video-cutter/.env`, добавьте ключ, перезапустите |
+| Нет места на диске | Очистите старые видео: `rm /opt/video-cutter/videos/*` |
+| Контейнер падает | Проверьте логи: `docker compose logs --tail=50` |
+| Порт 8000 занят | Измените в `docker-compose.yml`: `"8080:8000"` |
+
+---
+
+## ⚙️ Настройки (config.json)
+
 ```json
 {
   "whisper_model_path": "models/ggml-medium.bin",
-  "llm_model_path": "models/llama-2-13b-ggml-q4_0.bin",
-  "use_gpu": true,
-  "videos_dir": "videos",
+  "genapi_network_id": "gpt-4-1",
+  "models_dir": "models",
+  "use_gpu": false,
+  "whisper_language": "ru",
+  "video_dir": "videos",
+  "output_dir": "output",
   "temp_dir": "tmp"
 }
 ```
-*Если GPU нет – поставьте `false`.*
 
-## 🚀 Запуск сервера
-```bash
-uvicorn server:app --host 0.0.0.0 --port 8000
-```
-Откройте в браузере: `http://localhost:8000`
-
-## 📺 Как пользоваться UI
-1. **Выберите файлы** через кнопку *Выбор видео* **или** введите URL Twitch‑VOD и нажмите *Скачать с Twitch*.
-2. После появления файла в списке нажмите на название – он станет текущим.
-3. Нажмите **Запустить транскрипцию** – появится spinner‑индикатор и прогресс‑бар.
-4. Когда транскрипция завершится, автоматически выполнится запрос к LLM и отобразятся **ключевые фрагменты** и **резюме**.
-5. Результаты можно копировать или скачать в виде `*.txt`/`*.json`.
-
-## 🎨 UI‑детали (spinner)
-* В `static/styles.css` добавлен стиль `.spinner` – вращающийся круг.
-* В `static/app.js` реализована функция `showSpinner()` / `hideSpinner()` для отображения индикатора во время длительных запросов (`/api/download`, `/api/transcribe`, `/api/summary`).
-
-## 📚 Тестирование
-Для быстрой проверки возьмите любой короткий Twitch‑VOD (≈30 сек). Пример URL:
-```
-https://www.twitch.tv/videos/123456789
-```
-Нажмите *Скачать с Twitch*, затем *Транскрибировать*. После завершения вы увидите массив ключевых пунктов и резюме.
-
-## 🛠️ Возможные проблемы
-| Проблема | Решение |
-|----------|--------|
-| `uvicorn` не устанавливается (SOCKS error) | Установите `pip install "uvicorn[standard]"` как показано выше. |
-| Ошибка `whisper: CUDA not found` | Проверьте, что драйвер NVIDIA и CUDA‑toolkit установлены; `nvidia-smi` должна показывать вашу видеокарту. |
-| LLM «out of memory» | Снизьте размер модели (например, `ggml-q5_0`‑версию) или запустите с `--cpu` (уберите `use_gpu`). |
-| Нет доступа к папке `videos/` | Убедитесь, что пользователь имеет права записи в каталоге проекта. |
-
-## 📄 Лицензия
-MIT – свободно использовать, модифицировать и распространять.
+| Параметр | Описание |
+|---|---|
+| `whisper_model_path` | Путь к модели Whisper |
+| `genapi_network_id` | Модель GenAPI: `gpt-4-1` или `gemini-2-5-flash-lite` |
+| `use_gpu` | `true` — Whisper на GPU (нужна NVIDIA + CUDA), `false` — CPU |
+| `whisper_language` | Язык транскрипции: `ru`, `en`, `auto` |
 
 ---
 
-*Happy hacking! 🚀*
+## 🔑 Получение ключа GenAPI
+
+1. Зарегистрируйтесь на [gen-api.ru](https://gen-api.ru)
+2. Перейдите в раздел **API Keys**
+3. Создайте ключ и скопируйте его
+4. Вставьте в `.env`: `GEN_API_KEY=sk-...`
+
+---
+
+## 📄 Лицензия
+
+MIT — свободно использовать, изменять, распространять.
