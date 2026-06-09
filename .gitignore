@@ -1,0 +1,47 @@
+# Секреты
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Данные (не коммитим)
+tmp/
+videos/
+output/
+
+# Модели — огромные файлы, не для репозитория
+models/
+gemma-4-12B-it-qat-q4_0-unquantized/
+*.bin
+*.gguf
+*.ggmlv3.*
+
+# Скомпилированные бинарники Whisper
+whisper
+whisper-cuda
+whisper.exe
+whisper-cuda.exe
+
+# ffmpeg
+ffmpeg.exe
+ffprobe.exe
+ffmpeg_tmp*
+whisper_tmp*
+
+# PyInstaller
+dist/
+build/
+*.spec.bak
+
+# IDE
+.idea/
+.vscode/
+
+# Логи
+*.log
+*.zip
+whisper.cpp/

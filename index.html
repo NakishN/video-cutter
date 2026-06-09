@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Транскрипция и резюмирование Twitch‑видео</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <main class="container">
+    <h1 class="title">Транскрипция и резюмирование видео</h1>
+
+    <section class="upload-section">
+      <label class="field-label" for="whisperModelSelect">Модель Whisper (локально на ПК)</label>
+      <select id="whisperModelSelect" class="select"></select>
+
+      <label class="field-label" for="summaryBackendSelect">Резюме</label>
+      <select id="summaryBackendSelect" class="select"></select>
+
+      <label class="checkbox-label">
+        <input type="checkbox" id="timestampsCheckbox" checked />
+        Таймкоды (файл .srt)
+      </label>
+
+      <input type="text" id="twitchUrlInput" placeholder="URL Twitch‑видео" />
+      <input type="file" id="videoInput" accept="video/*,audio/*" />
+
+      <div class="btn-row">
+        <button id="downloadTwitchBtn" class="btn">Скачать с Twitch</button>
+        <button id="processBtn" class="btn btn-primary">Обработать файл</button>
+      </div>
+    </section>
+
+    <section class="result-section hidden" id="resultSection">
+      <h2>Результат</h2>
+      <h3 class="result-heading">Транскрипция</h3>
+      <pre id="transcriptText" class="summary"></pre>
+      <h3 class="result-heading hidden" id="srtHeading">С таймкодами (SRT)</h3>
+      <pre id="srtText" class="summary hidden"></pre>
+      <h3 class="result-heading hidden" id="summaryHeading">Резюме</h3>
+      <pre id="summaryText" class="summary hidden"></pre>
+      <button id="downloadBtn" class="btn">Скачать все результаты</button>
+    </section>
+
+    <section class="progress-section hidden" id="progressSection">
+      <h2 class="progress-title">Обработка</h2>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <p class="progress-message" id="progressMessage">Запуск…</p>
+      <pre class="progress-log" id="progressLog"></pre>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

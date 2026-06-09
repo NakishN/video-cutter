@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Твич‑нарезка | Автоматическая транскрипция</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Твич‑нарезка | Автоматическая транскрипция</h1>
+  <div id="spinner" class="spinner hidden"></div>
+
+  <main class="container">
+    <!-- Выбор видео -->
+    <section class="card">
+      <h2>Выбор видео</h2>
+      <div class="controls">
+        <input type="file" id="fileInput" multiple accept="video/*" />
+        <input type="text" id="twitchUrl" placeholder="URL Twitch‑VOD (необязательно)" />
+        <button id="downloadBtn" class="btn">Скачать с Twitch</button>
+        <button id="refreshListBtn" class="btn">Обновить список</button>
+      </div>
+      <ul id="videoList" class="video-list"></ul>
+    </section>
+
+    <!-- Транскрипция -->
+    <section class="card" id="transcribeSection" style="display:none;">
+      <h2>Транскрипция</h2>
+      <p>Текущий файл: <span id="currentFile"></span></p>
+      <button id="transcribeBtn" class="btn">Запустить транскрипцию</button>
+      <pre id="transcriptOutput" class="output"></pre>
+    </section>
+
+    <!-- Ключевые фрагменты и резюме -->
+    <section class="card" id="summarySection" style="display:none;">
+      <h2>Результаты</h2>
+      <h3>Ключевые фрагменты</h3>
+      <ul id="keyPoints" class="points"></ul>
+      <h3>Краткое резюме</h3>
+      <p id="summaryText" class="summary"></p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

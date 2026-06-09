@@ -1,0 +1,36 @@
+# Git
+.git/
+.gitignore
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Данные (хранятся в volumes)
+videos/
+output/
+tmp/
+
+# Модели — тяжёлые, скачиваются отдельно
+models/
+gemma-4-12B-it-qat-q4_0-unquantized/
+
+# Бинарники
+whisper
+whisper-cuda
+*.bin
+
+# IDE
+.idea/
+.vscode/
+
+# Прочее
+*.log
+*.zip

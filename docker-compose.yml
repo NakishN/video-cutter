@@ -1,0 +1,21 @@
+services:
+  app:
+    build: .
+    image: video-cutter:latest
+    container_name: video-cutter
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Данные хранятся на хосте, не теряются при пересборке контейнера
+      - ./models:/app/models
+      - ./videos:/app/videos
+      - ./output:/app/output
+      - ./tmp:/app/tmp
+    # Ограничение памяти — достаточно для whisper medium на CPU
+    deploy:
+      resources:
+        limits:
+          memory: 4G

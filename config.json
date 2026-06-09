@@ -1,0 +1,10 @@
+{
+  "whisper_model_path": "models/ggml-medium.bin",
+  "genapi_network_id": "gemini-2-5-flash-lite",
+  "models_dir": "models",
+  "use_gpu": true,
+  "whisper_language": "ru",
+  "video_dir": "videos",
+  "output_dir": "output",
+  "temp_dir": "tmp"
+}
