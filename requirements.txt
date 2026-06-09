@@ -1,6 +1,8 @@
 fastapi
-"uvicorn[standard]"
+uvicorn[standard]
 python-dotenv
 httpx
 pydantic
 yt-dlp
+faster-whisper
+imageio-ffmpeg

@@ -1,5 +1,6 @@
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -136,6 +137,57 @@ SUMMARY_MODEL_PATH = ROOT / cfg.get(
     "summary_model_path", "gemma-4-12B-it-qat-q4_0-unquantized"
 )
 AUDIO_EXTENSIONS = {".wav", ".flac", ".mp3", ".ogg", ".m4a"}
+
+
+def _find_ffmpeg() -> str:
+    """ffmpeg: рядом с приложением → PATH → imageio-ffmpeg (Windows-бандл)."""
+    ext = ".exe" if platform.system() == "Windows" else ""
+    local = ROOT / f"ffmpeg{ext}"
+    if local.is_file():
+        return str(local)
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    try:
+        import imageio_ffmpeg  # type: ignore
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        pass
+    return "ffmpeg"  # упадёт с понятной ошибкой
+
+
+def _find_ffprobe() -> str:
+    """ffprobe: рядом с приложением → PATH → рядом с imageio-ffmpeg."""
+    ext = ".exe" if platform.system() == "Windows" else ""
+    local = ROOT / f"ffprobe{ext}"
+    if local.is_file():
+        return str(local)
+    found = shutil.which("ffprobe")
+    if found:
+        return found
+    # imageio-ffmpeg кладёт ffprobe рядом с ffmpeg
+    try:
+        import imageio_ffmpeg  # type: ignore
+        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+        ffprobe_path = Path(ffmpeg_path).with_name(f"ffprobe{ext}")
+        if ffprobe_path.is_file():
+            return str(ffprobe_path)
+    except Exception:
+        pass
+    return "ffprobe"
+
+
+def _fmt_srt_time(seconds: float) -> str:
+    h, rem = divmod(int(seconds), 3600)
+    m, s = divmod(rem, 60)
+    ms = int((seconds - int(seconds)) * 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def _fmt_timestamp(seconds: float) -> str:
+    h, rem = divmod(int(seconds), 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
 
 _gemma_tokenizer = None
 _gemma_model = None
@@ -293,7 +345,7 @@ async def api_options():
 
 def _probe_duration(media_path: Path) -> Optional[float]:
     cmd = [
-        "ffprobe", "-v", "error",
+        _find_ffprobe(), "-v", "error",
         "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1",
         str(media_path),
@@ -312,7 +364,7 @@ def extract_audio(media_path: Path, job: Optional[Job] = None) -> Path:
     audio_path = TMP_DIR / f"{media_path.stem}.wav"
     duration = _probe_duration(media_path)
     cmd = [
-        "ffmpeg", "-y", "-i", str(media_path),
+        _find_ffmpeg(), "-y", "-i", str(media_path),
         "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
         str(audio_path),
     ]
@@ -342,6 +394,63 @@ def extract_audio(media_path: Path, job: Optional[Job] = None) -> Path:
     return audio_path
 
 
+def run_whisper_faster(
+    video_path: Path,
+    model_name: str = "medium",
+    *,
+    with_timestamps: bool = True,
+    job: Optional[Job] = None,
+) -> tuple[str, str]:
+    """Транскрипция через faster-whisper (pip-пакет, без бинарника)."""
+    try:
+        from faster_whisper import WhisperModel  # type: ignore
+    except ImportError:
+        raise RuntimeError(
+            "Установите faster-whisper: pip install faster-whisper"
+        )
+
+    if job:
+        job.log(
+            f"Загрузка модели Whisper '{model_name}' "
+            "(первый раз: авто-загрузка ~1.5 ГБ)…",
+            progress=2, status="transcribing",
+        )
+
+    fw_model = WhisperModel(model_name, device="cpu", compute_type="int8")
+    audio_path = extract_audio(video_path, job=job)
+
+    if job:
+        job.log("Транскрипция (faster-whisper)…", progress=10, status="transcribing")
+
+    lang = WHISPER_LANGUAGE if WHISPER_LANGUAGE.lower() != "auto" else None
+    segments_gen, _info = fw_model.transcribe(
+        str(audio_path), language=lang, beam_size=5, vad_filter=True,
+    )
+
+    transcript_parts: list[str] = []
+    srt_parts: list[str] = []
+    idx = 0
+    for segment in segments_gen:
+        text = segment.text.strip()
+        if not text:
+            continue
+        idx += 1
+        transcript_parts.append(text)
+        if with_timestamps:
+            srt_parts.append(
+                f"{idx}\n"
+                f"{_fmt_srt_time(segment.start)} --> {_fmt_srt_time(segment.end)}\n"
+                f"{text}\n"
+            )
+        if job and idx % 10 == 0:
+            pct = min(89, 10 + idx // 3)
+            job.log(f"[{_fmt_timestamp(segment.start)}] {text[:80]}", progress=pct)
+
+    if job:
+        job.log("Транскрипция завершена", progress=90)
+    return "\n".join(transcript_parts), "\n".join(srt_parts)
+
+
 def run_whisper(
     video_path: Path,
     whisper_model: Path,
@@ -349,14 +458,17 @@ def run_whisper(
     with_timestamps: bool = True,
     job: Optional[Job] = None,
 ) -> tuple[str, str]:
-    import platform as _platform
-    _ext = ".exe" if _platform.system() == "Windows" else ""
+    _ext = ".exe" if platform.system() == "Windows" else ""
     _cuda_name = f"whisper-cuda{_ext}"
     _plain_name = f"whisper{_ext}"
     whisper_bin = ROOT / (_cuda_name if USE_GPU and (ROOT / _cuda_name).is_file() else _plain_name)
     if not whisper_bin.is_file():
-        text = "[Whisper binary missing – transcription unavailable]"
-        return text, ""
+        # Бинарник не найден — используем faster-whisper (pip-пакет)
+        model_name = whisper_model.stem.removeprefix("ggml-") if whisper_model else "medium"
+        return run_whisper_faster(
+            video_path, model_name,
+            with_timestamps=with_timestamps, job=job,
+        )
 
     if not whisper_model.is_file() or whisper_model.stat().st_size < 1_000_000:
         raise RuntimeError(f"Модель Whisper не найдена или повреждена: {whisper_model}")
