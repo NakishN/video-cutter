@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 import uuid
+import zipfile
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,7 +59,7 @@ def _strip_ansi(text: str) -> str:
 
 
 def _build_yt_dlp_opts(outtmpl: str) -> dict:
-    opts: dict = {"outtmpl": outtmpl, "format": "best"}
+    opts: dict = {"outtmpl": outtmpl, "format": "bestaudio/best"}
     if YTDLP_PROXY is not None:
         proxy = YTDLP_PROXY.strip()
         if proxy.lower() in ("", "direct", "none", "false", "0"):
@@ -73,40 +74,48 @@ def _is_proxy_connection_error(exc: BaseException) -> bool:
     return "connection refused" in msg or "errno 111" in msg
 
 
-def download_twitch_video(url: str, video_path: Path, job: Optional["Job"] = None) -> None:
-    """Скачивает VOD с Twitch; при мёртвом прокси в окружении пробует без него."""
+def download_twitch_video(url: str, video_path: Path, job: Optional["Job"] = None) -> str:
+    """Скачивает VOD с Twitch/YouTube; при мёртвом прокси в окружении пробует без него. Возвращает название видео."""
     from yt_dlp import YoutubeDL
 
     outtmpl = str(video_path)
     opts = _build_yt_dlp_opts(outtmpl)
     force_direct = YTDLP_PROXY is not None and opts.get("proxy") == ""
 
-    def _run(use_direct: bool) -> None:
+    platform_name = "видео"
+    if "twitch" in url.lower():
+        platform_name = "Twitch"
+    elif "youtube" in url.lower() or "youtu.be" in url.lower():
+        platform_name = "YouTube"
+
+    def _run(use_direct: bool) -> str:
         run_opts = dict(opts)
         if use_direct:
             run_opts["proxy"] = ""
         ctx = _without_system_proxy() if use_direct else nullcontext()
         with ctx:
             with YoutubeDL(run_opts) as ydl:
-                ydl.download([url])
+                info = ydl.extract_info(url, download=True)
+                return info.get("title") or f"downloaded_video_{int(time.time())}"
 
     try:
         if force_direct:
             if job:
-                job.log("Скачивание с Twitch (без прокси)…")
-            _run(use_direct=True)
-            return
-        _run(use_direct=False)
+                job.log(f"Скачивание с {platform_name} (без прокси)…")
+            return _run(use_direct=True)
+        if job:
+            job.log(f"Скачивание с {platform_name}…")
+        return _run(use_direct=False)
     except Exception as first_error:
         if not _is_proxy_connection_error(first_error):
             raise RuntimeError(_strip_ansi(str(first_error))) from first_error
         if job:
             job.log("Прокси недоступен, повтор без прокси…")
         try:
-            _run(use_direct=True)
+            return _run(use_direct=True)
         except Exception as second_error:
             raise RuntimeError(
-                "Не удалось скачать с Twitch. Прокси в системе недоступен "
+                f"Не удалось скачать с {platform_name}. Прокси в системе недоступен "
                 f"(127.0.0.1: Connection refused). Запустите VPN/Clash или добавьте в .env:\n"
                 "YTDLP_PROXY=direct — скачивать без прокси\n"
                 "YTDLP_PROXY=socks5://127.0.0.1:10808 — явный адрес прокси\n\n"
@@ -416,8 +425,20 @@ def run_whisper_faster(
             progress=2, status="transcribing",
         )
 
-    fw_model = WhisperModel(model_name, device="cpu", compute_type="int8")
+    if USE_GPU:
+        try:
+            fw_model = WhisperModel(model_name, device="cuda", compute_type="float16")
+            if job:
+                job.log("Whisper инициализирован на GPU (CUDA).")
+        except Exception as e:
+            if job:
+                job.log(f"Не удалось запустить Whisper на GPU: {e}. Переключаемся на CPU.")
+            fw_model = WhisperModel(model_name, device="cpu", compute_type="int8")
+    else:
+        fw_model = WhisperModel(model_name, device="cpu", compute_type="int8")
+
     audio_path = extract_audio(video_path, job=job)
+    duration = _probe_duration(audio_path)
 
     if job:
         job.log("Транскрипция (faster-whisper)…", progress=10, status="transcribing")
@@ -443,7 +464,10 @@ def run_whisper_faster(
                 f"{text}\n"
             )
         if job and idx % 10 == 0:
-            pct = min(89, 10 + idx // 3)
+            if duration and duration > 0:
+                pct = min(89, 10 + int((segment.start / duration) * 80))
+            else:
+                pct = min(89, 10 + idx // 3)
             job.log(f"[{_fmt_timestamp(segment.start)}] {text[:80]}", progress=pct)
 
     if job:
@@ -461,7 +485,10 @@ def run_whisper(
     _ext = ".exe" if platform.system() == "Windows" else ""
     _cuda_name = f"whisper-cuda{_ext}"
     _plain_name = f"whisper{_ext}"
-    whisper_bin = ROOT / (_cuda_name if USE_GPU and (ROOT / _cuda_name).is_file() else _plain_name)
+    
+    use_cuda = USE_GPU and (ROOT / _cuda_name).is_file()
+    whisper_bin = ROOT / (_cuda_name if use_cuda else _plain_name)
+    
     if not whisper_bin.is_file():
         # Бинарник не найден — используем faster-whisper (pip-пакет)
         model_name = whisper_model.stem.removeprefix("ggml-") if whisper_model else "medium"
@@ -474,57 +501,73 @@ def run_whisper(
         raise RuntimeError(f"Модель Whisper не найдена или повреждена: {whisper_model}")
 
     audio_path = extract_audio(video_path, job=job)
-    cmd = [
-        str(whisper_bin), "-m", str(whisper_model), "-f", str(audio_path),
-        "-otxt", "-pp", "-l", WHISPER_LANGUAGE,
-    ]
-    if with_timestamps:
-        cmd.append("-osrt")
-    if not USE_GPU:
-        cmd.append("-ng")
+    
+    def _execute_bin(bin_path: Path, gpu_enabled: bool) -> tuple[str, str]:
+        cmd = [
+            str(bin_path), "-m", str(whisper_model), "-f", str(audio_path),
+            "-otxt", "-pp", "-l", WHISPER_LANGUAGE,
+        ]
+        if with_timestamps:
+            cmd.append("-osrt")
+        if not gpu_enabled:
+            cmd.append("-ng")
 
-    gpu_label = "GPU" if USE_GPU else "CPU"
-    if job:
-        job.log(
-            f"Транскрипция Whisper ({whisper_model.stem.removeprefix('ggml-')}, "
-            f"{WHISPER_LANGUAGE}, {gpu_label})…",
-            progress=6,
-            status="transcribing",
+        gpu_label = "GPU" if gpu_enabled else "CPU"
+        if job:
+            job.log(
+                f"Транскрипция Whisper ({whisper_model.stem.removeprefix('ggml-')}, "
+                f"{WHISPER_LANGUAGE}, {gpu_label})…",
+                progress=6,
+                status="transcribing",
+            )
+
+        proc = subprocess.Popen(
+            cmd,
+            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
         )
+        progress_re = re.compile(r"progress\s*=\s*(\d+)%")
+        assert proc.stderr is not None
+        for line in proc.stderr:
+            line = line.rstrip()
+            if not line:
+                continue
+            pct_match = progress_re.search(line)
+            if pct_match and job:
+                pct = int(pct_match.group(1))
+                job.log(f"Транскрипция: {pct}%", progress=5 + int(pct * 0.84))
+            elif line.startswith("[") and job:
+                job.log(line)
+            elif "processing" in line.lower() and job:
+                job.log(line, progress=7)
 
-    proc = subprocess.Popen(
-        cmd,
-        stderr=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        text=True,
-        bufsize=1,
-    )
-    progress_re = re.compile(r"progress\s*=\s*(\d+)%")
-    assert proc.stderr is not None
-    for line in proc.stderr:
-        line = line.rstrip()
-        if not line:
-            continue
-        pct_match = progress_re.search(line)
-        if pct_match and job:
-            pct = int(pct_match.group(1))
-            job.log(f"Транскрипция: {pct}%", progress=5 + int(pct * 0.84))
-        elif line.startswith("[") and job:
-            job.log(line)
-        elif "processing" in line.lower() and job:
-            job.log(line, progress=7)
+        if proc.wait() != 0:
+            raise RuntimeError(f"Бинарник Whisper ({gpu_label}) завершился с ошибкой")
 
-    if proc.wait() != 0:
-        raise RuntimeError("Whisper failed")
+        txt_path = Path(f"{audio_path}.txt")
+        if not txt_path.is_file():
+            raise RuntimeError("Файл транскрипции не был создан бинарником.")
+        transcript = txt_path.read_text(encoding="utf-8")
 
-    txt_path = Path(f"{audio_path}.txt")
-    if not txt_path.is_file():
-        raise RuntimeError("Transcription file not generated.")
-    transcript = txt_path.read_text(encoding="utf-8")
+        srt_path = Path(f"{audio_path}.srt")
+        transcript_srt = srt_path.read_text(encoding="utf-8") if srt_path.is_file() else ""
+        return transcript, transcript_srt
 
-    srt_path = Path(f"{audio_path}.srt")
-    transcript_srt = srt_path.read_text(encoding="utf-8") if srt_path.is_file() else ""
-    return transcript, transcript_srt
+    try:
+        return _execute_bin(whisper_bin, use_cuda)
+    except Exception as e:
+        if use_cuda:
+            plain_bin = ROOT / _plain_name
+            if plain_bin.is_file():
+                if job:
+                    job.log(f"Ошибка GPU транскрипции: {e}. Пробуем CPU версию…")
+                try:
+                    return _execute_bin(plain_bin, False)
+                except Exception as cpu_err:
+                    raise RuntimeError(f"Транскрипция не удалась на GPU и CPU: {cpu_err}") from cpu_err
+        raise e
 
 
 def _load_local_gemma():
@@ -713,7 +756,7 @@ async def download_twitch(request: TwitchDownloadRequest):
     if not request.url:
         raise HTTPException(status_code=400, detail="Missing 'url' field")
     try:
-        import yt_dlp  # noqa: F401 — проверка, что пакет установлен
+        import yt_dlp  # noqa: F401
     except ImportError:
         raise HTTPException(
             status_code=500,
@@ -723,12 +766,27 @@ async def download_twitch(request: TwitchDownloadRequest):
     job = _create_job()
 
     def work() -> dict:
-        video_path = VIDEO_DIR / f"twitch_video_{int(time.time())}.mp4"
-        job.log("Скачивание с Twitch…", progress=0, status="downloading")
+        video_id = int(time.time())
+        video_path = VIDEO_DIR / f"download_{video_id}.mp4"
+        job.log("Скачивание медиа...", progress=0, status="downloading")
         try:
-            download_twitch_video(request.url, video_path, job=job)
+            title = download_twitch_video(request.url, video_path, job=job)
+            # Санитизируем название видео
+            safe_title = re.sub(r'[\\/*?:"<>| ]', "_", title)
+            safe_title = re.sub(r'_+', '_', safe_title).strip('_')[:80]
+            if not safe_title:
+                safe_title = f"downloaded_video_{video_id}"
+            
+            pretty_path = VIDEO_DIR / f"{safe_title}_{video_id}.mp4"
+            try:
+                # Переименовываем скачанный файл в красивое имя
+                video_path.rename(pretty_path)
+                video_path = pretty_path
+            except Exception:
+                pass
         except Exception as e:
-            raise RuntimeError(f"yt_dlp download failed: {e}") from e
+            raise RuntimeError(f"Скачивание yt_dlp завершилось с ошибкой: {e}") from e
+        
         job.log("Скачивание завершено", progress=1)
         return process_media(
             video_path,
@@ -744,6 +802,9 @@ async def download_twitch(request: TwitchDownloadRequest):
 
 @app.get("/download/{video_name}")
 async def download_results(video_name: str):
+    # Предотвращение directory traversal
+    video_name = os.path.basename(video_name)
+    
     files = [
         OUTPUT_DIR / f"{video_name}_transcript.txt",
         OUTPUT_DIR / f"{video_name}_transcript.srt",
@@ -754,5 +815,34 @@ async def download_results(video_name: str):
         raise HTTPException(status_code=404, detail="Results not found.")
 
     zip_path = OUTPUT_DIR / f"{video_name}_results.zip"
-    subprocess.run(["zip", "-j", str(zip_path), *[str(p) for p in existing]], check=True)
+    
+    # Кроссплатформенная генерация архива на чистом Python
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for p in existing:
+            zip_file.write(p, arcname=p.name)
+            
     return FileResponse(zip_path, filename=zip_path.name)
+
+
+@app.post("/api/clear-cache")
+async def clear_cache():
+    try:
+        cleaned_size = 0
+        # Очищаем папки videos/ и tmp/
+        for directory in [VIDEO_DIR, TMP_DIR]:
+            for item in directory.glob("*"):
+                if item.is_file():
+                    cleaned_size += item.stat().st_size
+                    item.unlink()
+                elif item.is_dir():
+                    shutil.rmtree(item)
+                    
+        # Очищаем сгенерированные файлы результатов в output/
+        for item in OUTPUT_DIR.glob("*"):
+            if item.is_file():
+                cleaned_size += item.stat().st_size
+                item.unlink()
+                
+        return {"status": "ok", "cleaned_mb": round(cleaned_size / 1_048_576, 2)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

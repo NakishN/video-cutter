@@ -3,55 +3,167 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Транскрипция и резюмирование Twitch‑видео</title>
+  <title>AI Нарезчик видео | Транскрипция и резюмирование</title>
   <link rel="stylesheet" href="/static/styles.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <main class="container">
-    <h1 class="title">Транскрипция и резюмирование видео</h1>
-
-    <section class="upload-section">
-      <label class="field-label" for="whisperModelSelect">Модель Whisper (локально на ПК)</label>
-      <select id="whisperModelSelect" class="select"></select>
-
-      <label class="field-label" for="summaryBackendSelect">Резюме</label>
-      <select id="summaryBackendSelect" class="select"></select>
-
-      <label class="checkbox-label">
-        <input type="checkbox" id="timestampsCheckbox" checked />
-        Таймкоды (файл .srt)
-      </label>
-
-      <input type="text" id="twitchUrlInput" placeholder="URL Twitch‑видео" />
-      <input type="file" id="videoInput" accept="video/*,audio/*" />
-
-      <div class="btn-row">
-        <button id="downloadTwitchBtn" class="btn">Скачать с Twitch</button>
-        <button id="processBtn" class="btn btn-primary">Обработать файл</button>
+  <div class="container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="app-title-wrapper">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 13v-2.5L7.5 15l-1.42-1.42L8.5 11 6.08 8.58 7.5 7.16 10 9.66V7h2v2.66l2.5-2.5 1.42 1.42L13.5 11l2.42 2.42-1.42 1.42L12 12.5V16h-2z"/>
+          </svg>
+        </div>
+        <h1 class="app-title">AI Нарезчик видео</h1>
       </div>
-    </section>
+      <div class="status-badge-container">
+        <div id="gpuStatus" class="status-badge">
+          <span class="dot"></span>
+          <span>GPU Ускорение (CUDA)</span>
+        </div>
+        <div id="genapiStatus" class="status-badge">
+          <span class="dot"></span>
+          <span>GenAPI Облако</span>
+        </div>
+      </div>
+    </header>
 
-    <section class="result-section hidden" id="resultSection">
-      <h2>Результат</h2>
-      <h3 class="result-heading">Транскрипция</h3>
-      <pre id="transcriptText" class="summary"></pre>
-      <h3 class="result-heading hidden" id="srtHeading">С таймкодами (SRT)</h3>
-      <pre id="srtText" class="summary hidden"></pre>
-      <h3 class="result-heading hidden" id="summaryHeading">Резюме</h3>
-      <pre id="summaryText" class="summary hidden"></pre>
-      <button id="downloadBtn" class="btn">Скачать все результаты</button>
-    </section>
+    <!-- Main Grid -->
+    <div class="app-grid">
+      <!-- Sidebar Settings -->
+      <aside class="card">
+        <h2 class="card-title">Параметры</h2>
+        
+        <div class="form-group">
+          <label class="field-label" for="whisperModelSelect">Модель Whisper</label>
+          <select id="whisperModelSelect" class="select"></select>
+        </div>
 
-    <section class="progress-section hidden" id="progressSection">
-      <h2 class="progress-title">Обработка</h2>
+        <div class="form-group">
+          <label class="field-label" for="summaryBackendSelect">Резюме / Анализ</label>
+          <select id="summaryBackendSelect" class="select"></select>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="timestampsCheckbox" checked />
+            Сохранять таймкоды (.srt)
+          </label>
+        </div>
+
+        <button id="clearCacheBtn" class="btn btn-danger" style="margin-top: auto;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+          </svg>
+          Очистить кэш видео
+        </button>
+      </aside>
+
+      <!-- Main Panel -->
+      <main class="card" id="mainActionCard">
+        <h2 class="card-title">Источник медиа</h2>
+
+        <!-- Mode selector tabs -->
+        <div class="tab-container">
+          <button id="tabLocalBtn" class="tab-btn active">Локальный файл</button>
+          <button id="tabWebBtn" class="tab-btn">Ссылка (YouTube / Twitch)</button>
+        </div>
+
+        <!-- Local File Tab Content -->
+        <div id="panelLocal" class="tab-panel">
+          <div class="drop-zone" id="dropZone">
+            <svg class="drop-zone-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <span class="drop-zone-text" id="dropZoneText">Перетащите видео или аудио файл сюда или кликните для выбора</span>
+            <span class="drop-zone-file-info hidden" id="dropZoneFileInfo"></span>
+            <input type="file" id="videoInput" class="file-input" accept="video/*,audio/*" />
+          </div>
+          <button id="processBtn" class="btn btn-primary">
+            🚀 Начать обработку файла
+          </button>
+        </div>
+
+        <!-- Web Link Tab Content -->
+        <div id="panelWeb" class="tab-panel hidden">
+          <div class="form-group">
+            <label class="field-label" for="twitchUrlInput">Ссылка на трансляцию или видео</label>
+            <input type="text" id="twitchUrlInput" class="text-input" placeholder="https://www.youtube.com/watch?v=... или Twitch VOD" />
+          </div>
+          <button id="downloadTwitchBtn" class="btn btn-primary">
+            ⚡ Скачать и обработать ссылку
+          </button>
+        </div>
+      </main>
+    </div>
+
+    <!-- Progress Section -->
+    <section class="card hidden" id="progressSection">
+      <div class="progress-header-wrap">
+        <h2 class="card-title progress-title pulse">Идет обработка...</h2>
+        <span class="progress-percentage" id="progressPctText">0%</span>
+      </div>
       <div class="progress-bar-wrap">
         <div class="progress-bar" id="progressBar"></div>
       </div>
-      <p class="progress-message" id="progressMessage">Запуск…</p>
-      <pre class="progress-log" id="progressLog"></pre>
+      <p class="progress-message" id="progressMessage">Подготовка файлов…</p>
+      
+      <div class="progress-log-container">
+        <span class="progress-log-header">Лог консоли</span>
+        <pre class="progress-log" id="progressLog"></pre>
+      </div>
     </section>
-  </main>
+
+    <!-- Result Section -->
+    <section class="card hidden" id="resultSection">
+      <div class="result-header">
+        <h2 class="card-title">Результаты анализа</h2>
+        
+        <div class="result-tabs">
+          <button id="resTabSummary" class="result-tab-btn active">Резюме LLM</button>
+          <button id="resTabTranscript" class="result-tab-btn">Текст реплик</button>
+          <button id="resTabSrt" class="result-tab-btn">Таймкоды (SRT)</button>
+        </div>
+
+        <button id="downloadBtn" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Скачать все архивом
+        </button>
+      </div>
+
+      <div class="result-content">
+        <!-- Summary Panel -->
+        <div id="resPanelSummary" class="result-panel">
+          <div class="copy-btn-wrapper">
+            <button class="btn btn-copy" data-target="summaryText">Копировать</button>
+          </div>
+          <pre id="summaryText" class="summary-pre"></pre>
+        </div>
+
+        <!-- Transcript Panel -->
+        <div id="resPanelTranscript" class="result-panel hidden">
+          <div class="copy-btn-wrapper">
+            <button class="btn btn-copy" data-target="transcriptText">Копировать</button>
+          </div>
+          <pre id="transcriptText" class="summary-pre"></pre>
+        </div>
+
+        <!-- SRT Panel -->
+        <div id="resPanelSrt" class="result-panel hidden">
+          <div class="copy-btn-wrapper">
+            <button class="btn btn-copy" data-target="srtText">Копировать</button>
+          </div>
+          <pre id="srtText" class="summary-pre mono"></pre>
+        </div>
+      </div>
+    </section>
+  </div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>

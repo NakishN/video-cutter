@@ -59,7 +59,7 @@ if errorlevel 1 (
     echo  Possible reasons:
     echo  - No internet connection
     echo  - Antivirus blocking pip
-    echo  - Not enough disk space (need ~2 GB)
+    echo  - Not enough disk space, need about 2 GB
     echo.
     echo  See error_log.txt for details.
     echo.
@@ -90,9 +90,9 @@ if errorlevel 1 (
     echo  ================================================
     echo.
     echo  1. Register at https://gen-api.ru
-    echo  2. Copy your key (starts with sk-...)
+    echo  2. Copy your key, which starts with sk-...
     echo  3. Paste into .env file: GEN_API_KEY=sk-...
-    echo  4. Save .env (Ctrl+S) and close Notepad
+    echo  4. Save .env using Ctrl-S and close Notepad
     echo  5. Press any key here to continue
     echo.
     start "" "https://gen-api.ru"
