@@ -23,16 +23,17 @@ if not exist "venv\Scripts\activate.bat" (
 )
 call venv\Scripts\activate.bat >> "%LOG%" 2>&1
 
-:: -- Check PyInstaller --
-pyinstaller --version >> "%LOG%" 2>&1
+echo [1/3] Installing/updating requirements inside venv...
+echo [1/3] Installing/updating requirements inside venv >> "%LOG%"
+pip install -q -r requirements.txt pyinstaller >> "%LOG%" 2>&1
 if errorlevel 1 (
-    echo Installing PyInstaller...
-    echo Installing PyInstaller >> "%LOG%"
-    pip install -q pyinstaller >> "%LOG%" 2>&1
+    echo [ERROR] Failed to install/update requirements. See build_log.txt
+    echo [ERROR] Failed to install/update requirements >> "%LOG%"
+    pause & exit /b 1
 )
 
-echo [1/2] Compiling EXE (takes 1-3 minutes)...
-echo [1/2] Compiling EXE >> "%LOG%"
+echo [2/3] Compiling EXE (takes 1-3 minutes)...
+echo [2/3] Compiling EXE >> "%LOG%"
 pyinstaller video_cutter.spec --clean --noconfirm >> "%LOG%" 2>&1
 
 if errorlevel 1 (
@@ -45,8 +46,8 @@ if errorlevel 1 (
 :: -- Copy binaries and models to dist/ --
 set "DIST=dist\VideoCutter"
 
-echo [2/2] Copying assets to %DIST%...
-echo [2/2] Copying assets to %DIST% >> "%LOG%"
+echo [3/3] Copying assets to %DIST%...
+echo [3/3] Copying assets to %DIST% >> "%LOG%"
 
 if exist "whisper.exe"  copy /Y "whisper.exe"  "%DIST%\whisper.exe"  >> "%LOG%" 2>&1
 if exist "ffmpeg.exe"   copy /Y "ffmpeg.exe"   "%DIST%\ffmpeg.exe"   >> "%LOG%" 2>&1

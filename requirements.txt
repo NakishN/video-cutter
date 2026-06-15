@@ -7,3 +7,5 @@ yt-dlp
 faster-whisper
 imageio-ffmpeg
 opencv-python
+python-multipart
+numpy

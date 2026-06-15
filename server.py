@@ -17,6 +17,7 @@ from video_utils import parse_summary_to_clips, cut_and_crop_video, extract_subt
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+import multipart
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
