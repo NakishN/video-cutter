@@ -41,10 +41,11 @@ def main() -> None:
     import traceback
     import platform
     import sys
-    import uvicorn
-    from server import app  # noqa: импорт после смены CWD/PATH
 
     try:
+        import uvicorn
+        from server import app  # noqa: импорт после смены CWD/PATH
+
         threading.Thread(target=_open_browser, daemon=True).start()
 
         print("=" * 55)
