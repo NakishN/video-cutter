@@ -132,17 +132,23 @@ def download_twitch_video(url: str, video_path: Path, download_mode: str = "audi
 
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# APP_ROOT задаётся launcher.py при запуске как .exe (PyInstaller)
+ROOT = Path(os.environ.get("APP_ROOT", Path(__file__).parent))
 
-CONFIG_PATH = Path(__file__).parent / "config.json"
+# Загружаем config.json: сначала ищем рядом с .exe, затем в ресурсах сборки
+CONFIG_PATH = ROOT / "config.json"
+if not CONFIG_PATH.is_file():
+    CONFIG_PATH = Path(__file__).parent / "config.json"
 if not CONFIG_PATH.is_file():
     raise RuntimeError("config.json not found. Please create it first.")
 with open(CONFIG_PATH, "r", encoding="utf-8") as f:
     cfg = json.load(f)
 
-# APP_ROOT задаётся launcher.py при запуске как .exe (PyInstaller)
-ROOT = Path(os.environ.get("APP_ROOT", Path(__file__).parent))
+# Монтируем статические ресурсы из папки сборки (внутри .exe)
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 VIDEO_DIR = ROOT / cfg.get("video_dir", "videos")
 OUTPUT_DIR = ROOT / cfg.get("output_dir", "output")
 app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
@@ -351,7 +357,8 @@ def _default_summary_backend() -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-    return HTMLResponse((ROOT / "index.html").read_text(encoding="utf-8"))
+    index_path = Path(__file__).parent / "index.html"
+    return HTMLResponse(index_path.read_text(encoding="utf-8"))
 
 
 @app.get("/health")
