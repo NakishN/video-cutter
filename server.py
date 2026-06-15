@@ -151,9 +151,16 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 VIDEO_DIR = ROOT / cfg.get("video_dir", "videos")
 OUTPUT_DIR = ROOT / cfg.get("output_dir", "output")
-app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
 TMP_DIR = ROOT / cfg.get("temp_dir", "tmp")
 MODELS_DIR = ROOT / cfg.get("models_dir", "models")
+
+# Создаем директории на диске, если их еще нет, чтобы избежать ошибок при монтировании StaticFiles
+VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+TMP_DIR.mkdir(parents=True, exist_ok=True)
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
 USE_GPU = cfg.get("use_gpu", False)
 WHISPER_LANGUAGE = cfg.get("whisper_language", "ru")
 GEN_API_KEY = os.getenv("GEN_API_KEY", "")
