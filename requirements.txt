@@ -6,3 +6,4 @@ pydantic
 yt-dlp
 faster-whisper
 imageio-ffmpeg
+opencv-python

@@ -11,7 +11,9 @@ import zipfile
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
+
+from video_utils import parse_summary_to_clips, cut_and_crop_video, extract_subtitles_for_clip, parse_time_to_seconds
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -126,6 +128,7 @@ def download_twitch_video(url: str, video_path: Path, job: Optional["Job"] = Non
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
 CONFIG_PATH = Path(__file__).parent / "config.json"
 if not CONFIG_PATH.is_file():
     raise RuntimeError("config.json not found. Please create it first.")
@@ -136,6 +139,7 @@ with open(CONFIG_PATH, "r", encoding="utf-8") as f:
 ROOT = Path(os.environ.get("APP_ROOT", Path(__file__).parent))
 VIDEO_DIR = ROOT / cfg.get("video_dir", "videos")
 OUTPUT_DIR = ROOT / cfg.get("output_dir", "output")
+app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
 TMP_DIR = ROOT / cfg.get("temp_dir", "tmp")
 MODELS_DIR = ROOT / cfg.get("models_dir", "models")
 USE_GPU = cfg.get("use_gpu", False)
@@ -264,6 +268,8 @@ TMP_DIR.mkdir(parents=True, exist_ok=True)
 
 def list_whisper_models() -> list[dict]:
     models = []
+    for fw in ["tiny", "base", "small", "medium", "large-v2", "large-v3"]:
+        models.append({"id": fw, "label": f"faster-whisper: {fw}", "size_mb": 0})
     for path in sorted(MODELS_DIR.glob("ggml-*.bin")):
         if path.stat().st_size < 1_000_000:
             continue
@@ -278,18 +284,27 @@ def list_whisper_models() -> list[dict]:
     return models
 
 
-def resolve_whisper_model(model_id: Optional[str]) -> Path:
-    models = {m["id"]: MODELS_DIR / f"ggml-{m['id']}.bin" for m in list_whisper_models()}
-    if not models:
-        fallback = ROOT / cfg.get("whisper_model_path", "models/ggml-medium.bin")
-        if fallback.is_file() and fallback.stat().st_size > 1_000_000:
-            return fallback
-        raise RuntimeError("Нет доступных моделей Whisper в папке models/")
+def resolve_whisper_model(model_id: Optional[str]) -> Union[Path, str]:
+    fw_models = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
+    if model_id in fw_models:
+        return model_id
+
+    models = {path.stem.removeprefix("ggml-"): path for path in MODELS_DIR.glob("ggml-*.bin") if path.stat().st_size > 1_000_000}
+    
     if model_id and model_id in models:
         return models[model_id]
+        
+    fallback = ROOT / cfg.get("whisper_model_path", "models/ggml-medium.bin")
+    if fallback.is_file() and fallback.stat().st_size > 1_000_000:
+        return fallback
+        
     if "medium" in models:
         return models["medium"]
-    return next(iter(models.values()))
+    if models:
+        return next(iter(models.values()))
+    
+    # Fallback default
+    return "medium"
 
 
 GENAPI_MODELS: dict[str, tuple[str, str]] = {
@@ -445,7 +460,7 @@ def run_whisper_faster(
 
     lang = WHISPER_LANGUAGE if WHISPER_LANGUAGE.lower() != "auto" else None
     segments_gen, _info = fw_model.transcribe(
-        str(audio_path), language=lang, beam_size=5, vad_filter=True,
+        str(audio_path), language=lang, beam_size=1, vad_filter=True,
     )
 
     transcript_parts: list[str] = []
@@ -477,11 +492,14 @@ def run_whisper_faster(
 
 def run_whisper(
     video_path: Path,
-    whisper_model: Path,
+    whisper_model: Union[Path, str],
     *,
     with_timestamps: bool = True,
     job: Optional[Job] = None,
 ) -> tuple[str, str]:
+    if isinstance(whisper_model, str):
+        return run_whisper_faster(video_path, whisper_model, with_timestamps=with_timestamps, job=job)
+
     _ext = ".exe" if platform.system() == "Windows" else ""
     _cuda_name = f"whisper-cuda{_ext}"
     _plain_name = f"whisper{_ext}"
@@ -645,6 +663,7 @@ def process_media(
     whisper_model_id: Optional[str],
     summary_backend: str,
     with_timestamps: bool,
+    layout: str = "vertical_reels",
     job: Optional[Job] = None,
 ) -> dict:
     if _resolve_genapi_network(summary_backend) and not GEN_API_KEY:
@@ -661,13 +680,63 @@ def process_media(
     )
     save_results(media_path.stem, transcript, transcript_srt, summary)
 
+    clips_list = []
+    clips_info = parse_summary_to_clips(summary)
+    if clips_info:
+        # Ограничиваем количество клипов до 15 самых интересных (по оценке),
+        # чтобы избежать бесконечной нарезки и переполнения диска
+        if len(clips_info) > 15:
+            if job:
+                job.log(f"Найдено {len(clips_info)} моментов. Выбираем 15 лучших по оценке для экономии времени...")
+            # Сортируем по score по убыванию
+            clips_info = sorted(clips_info, key=lambda x: x.get("score", 0), reverse=True)[:15]
+            # Сортируем обратно по хронологии
+            clips_info = sorted(clips_info, key=lambda x: x.get("start_sec", 0))
+
+        if job: job.log(f"Нарезаем {len(clips_info)} лучших клипов...", progress=95, status="cutting")
+        for i, clip in enumerate(clips_info, 1):
+            if job: job.log(f"Нарезка клипа {i}/{len(clips_info)}: {clip['title']}")
+            clip_srt_path = TMP_DIR / f"{media_path.stem}_clip_{i}.srt"
+            clip_subtitles = extract_subtitles_for_clip(transcript_srt, clip["start_sec"], clip["end_sec"])
+            clip_srt_path.write_text(clip_subtitles, encoding="utf-8")
+            
+            output_clip_path = OUTPUT_DIR / f"{media_path.stem}_clip_{i}.mp4"
+            try:
+                cut_and_crop_video(
+                    video_path=media_path,
+                    start_sec=clip["start_sec"],
+                    end_sec=clip["end_sec"],
+                    clip_srt_path=clip_srt_path if with_timestamps else None,
+                    output_clip_path=output_clip_path,
+                    ffmpeg_bin=_find_ffmpeg(),
+                    ffprobe_bin=_find_ffprobe(),
+                    layout=layout,
+                    use_gpu=USE_GPU
+                )
+                clips_list.append({
+                    "index": i,
+                    "title": clip["title"],
+                    "start_str": clip["start_str"],
+                    "end_str": clip["end_str"],
+                    "score": clip["score"],
+                    "description": clip["description"],
+                    "filename": output_clip_path.name
+                })
+            except Exception as e:
+                if job: job.log(f"Ошибка при нарезке клипа {i}: {e}")
+            
+    if job: job.log("Обработка полностью завершена", progress=100)
+
+    model_label = whisper_model if isinstance(whisper_model, str) else whisper_model.stem.removeprefix("ggml-")
+
     return {
         "filename": media_path.name,
         "transcript": transcript,
         "transcript_srt": transcript_srt,
         "summary": summary,
-        "whisper_model": whisper_model.stem.removeprefix("ggml-"),
+        "whisper_model": model_label,
         "summary_backend": summary_backend,
+        "clips": clips_list
     }
 
 
@@ -700,6 +769,7 @@ async def process_video(
     whisper_model: Optional[str] = Form(None),
     summary_backend: str = Form("genapi-gpt-4-1"),
     with_timestamps: bool = Form(True),
+    layout: str = Form("vertical_reels"),
 ):
     dest_path = VIDEO_DIR / Path(file.filename).name
     with dest_path.open("wb") as out_f:
@@ -715,6 +785,7 @@ async def process_video(
                 whisper_model_id=whisper_model,
                 summary_backend=summary_backend,
                 with_timestamps=with_timestamps,
+                layout=layout,
                 job=job,
             ),
         ),
@@ -729,6 +800,7 @@ async def process_video_sync(
     whisper_model: Optional[str] = Form(None),
     summary_backend: str = Form("genapi-gpt-4-1"),
     with_timestamps: bool = Form(True),
+    layout: str = Form("vertical_reels"),
 ):
     dest_path = VIDEO_DIR / Path(file.filename).name
     with dest_path.open("wb") as out_f:
@@ -739,6 +811,7 @@ async def process_video_sync(
             whisper_model_id=whisper_model,
             summary_backend=summary_backend,
             with_timestamps=with_timestamps,
+            layout=layout,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -749,6 +822,7 @@ class TwitchDownloadRequest(BaseModel):
     whisper_model: Optional[str] = None
     summary_backend: str = "genapi-gpt-4-1"
     with_timestamps: bool = True
+    layout: str = "vertical_reels"
 
 
 @app.post("/twitch")
@@ -793,11 +867,91 @@ async def download_twitch(request: TwitchDownloadRequest):
             whisper_model_id=request.whisper_model,
             summary_backend=request.summary_backend,
             with_timestamps=request.with_timestamps,
+            layout=request.layout,
             job=job,
         )
 
     threading.Thread(target=_run_job, args=(job, work), daemon=True).start()
     return {"job_id": job.id}
+
+
+class ManualCutRequest(BaseModel):
+    video_name: str
+    start_str: str
+    end_str: str
+    title: str
+    layout: str = "vertical_reels"
+    with_timestamps: bool = True
+
+
+@app.post("/api/cut-manual")
+async def cut_manual(request: ManualCutRequest):
+    # Предотвращение directory traversal
+    video_name = os.path.basename(request.video_name)
+    video_path = VIDEO_DIR / video_name
+    if not video_path.is_file():
+        # Попробуем найти без расширения или поискать по названию
+        stem = Path(video_name).stem
+        candidates = list(VIDEO_DIR.glob(f"{stem}*"))
+        if candidates:
+            video_path = candidates[0]
+        else:
+            raise HTTPException(status_code=404, detail=f"Оригинальное видео не найдено в кэше: {video_name}")
+
+    try:
+        start_sec = parse_time_to_seconds(request.start_str)
+        end_sec = parse_time_to_seconds(request.end_str)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неверный формат времени (используйте ЧЧ:ММ:СС или ММ:СС): {e}"
+        )
+
+    if end_sec <= start_sec:
+        raise HTTPException(
+            status_code=400,
+            detail="Время окончания должно быть больше времени начала"
+        )
+
+    # Ищем SRT в output
+    srt_name = f"{video_path.stem}_transcript.srt"
+    srt_path = OUTPUT_DIR / srt_name
+    clip_srt_path = None
+    if request.with_timestamps and srt_path.is_file():
+        full_srt_text = srt_path.read_text(encoding="utf-8")
+        clip_subtitles = extract_subtitles_for_clip(full_srt_text, start_sec, end_sec)
+        clip_srt_path = TMP_DIR / f"{video_path.stem}_manual_{int(time.time())}.srt"
+        clip_srt_path.write_text(clip_subtitles, encoding="utf-8")
+
+    clip_id = int(time.time())
+    output_clip_path = OUTPUT_DIR / f"{video_path.stem}_manual_{clip_id}.mp4"
+
+    try:
+        cut_and_crop_video(
+            video_path=video_path,
+            start_sec=start_sec,
+            end_sec=end_sec,
+            clip_srt_path=clip_srt_path,
+            output_clip_path=output_clip_path,
+            ffmpeg_bin=_find_ffmpeg(),
+            ffprobe_bin=_find_ffprobe(),
+            layout=request.layout,
+            use_gpu=USE_GPU
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка при нарезке видео: {e}")
+
+    return {
+        "status": "ok",
+        "clip": {
+            "title": request.title or f"Ручной клип ({request.start_str} - {request.end_str})",
+            "start_str": request.start_str,
+            "end_str": request.end_str,
+            "score": 100,
+            "description": "Создан вручную пользователем",
+            "filename": output_clip_path.name
+        }
+    }
 
 
 @app.get("/download/{video_name}")
@@ -810,6 +964,10 @@ async def download_results(video_name: str):
         OUTPUT_DIR / f"{video_name}_transcript.srt",
         OUTPUT_DIR / f"{video_name}_summary.txt",
     ]
+    # Добавляем все сгенерированные клипы
+    for clip_path in OUTPUT_DIR.glob(f"{video_name}_clip_*.mp4"):
+        files.append(clip_path)
+
     existing = [p for p in files if p.is_file()]
     if not existing:
         raise HTTPException(status_code=404, detail="Results not found.")

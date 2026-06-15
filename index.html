@@ -48,6 +48,17 @@
         </div>
 
         <div class="form-group">
+          <label class="field-label" for="layoutSelect">Формат нарезки (Layout)</label>
+          <select id="layoutSelect" class="select">
+            <option value="widescreen">Оригинал (Горизонтально)</option>
+            <option value="vertical_reels">Рилсы (AI слежение за лицом)</option>
+            <option value="vertical_split">Gameplay + Facecam (разделение экрана)</option>
+            <option value="vertical_center">Вертикально (Центр)</option>
+            <option value="vertical_vtuber">Вертикально (Vtuber 15% слева)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
           <label class="checkbox-label">
             <input type="checkbox" id="timestampsCheckbox" checked />
             Сохранять таймкоды (.srt)
@@ -123,7 +134,8 @@
         <h2 class="card-title">Результаты анализа</h2>
         
         <div class="result-tabs">
-          <button id="resTabSummary" class="result-tab-btn active">Резюме LLM</button>
+          <button id="resTabClips" class="result-tab-btn active">🎬 Видеоклипы</button>
+          <button id="resTabSummary" class="result-tab-btn">Резюме LLM</button>
           <button id="resTabTranscript" class="result-tab-btn">Текст реплик</button>
           <button id="resTabSrt" class="result-tab-btn">Таймкоды (SRT)</button>
         </div>
@@ -137,8 +149,41 @@
       </div>
 
       <div class="result-content">
+        <!-- Clips Panel -->
+        <div id="resPanelClips" class="result-panel">
+          <div class="clips-grid" id="clipsGrid">
+            <!-- Dynamic clips list here -->
+          </div>
+          <!-- Manual cut inside clips tab -->
+          <div class="manual-cut-wrapper" style="margin-top: 2rem; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.25rem;">
+            <h3 style="margin-bottom: 1rem; color: #fff; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4H6zM3 6h18m-5 4v6m-4-6v6"/>
+              </svg>
+              Вырезать собственный клип вручную
+            </h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; align-items: flex-end;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="field-label" for="manualStartInput">Начало (ЧЧ:ММ:СС)</label>
+                <input type="text" id="manualStartInput" class="text-input" placeholder="00:01:20" />
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="field-label" for="manualEndInput">Конец (ЧЧ:ММ:СС)</label>
+                <input type="text" id="manualEndInput" class="text-input" placeholder="00:01:45" />
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="field-label" for="manualTitleInput">Название клипа</label>
+                <input type="text" id="manualTitleInput" class="text-input" placeholder="Мой крутой момент" />
+              </div>
+              <button id="manualCutBtn" class="btn btn-primary" style="height: 42px; margin-bottom: 2px;">
+                ✂️ Вырезать клип
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Summary Panel -->
-        <div id="resPanelSummary" class="result-panel">
+        <div id="resPanelSummary" class="result-panel hidden">
           <div class="copy-btn-wrapper">
             <button class="btn btn-copy" data-target="summaryText">Копировать</button>
           </div>

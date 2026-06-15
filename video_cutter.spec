@@ -46,6 +46,7 @@ a = Analysis(
         ("server.py", "."),
         ("genapi_client.py", "."),
         ("transcript_utils.py", "."),
+        ("video_utils.py", "."),
         # .env.example — подсказка пользователю
         (".env.example", "."),
     ],
@@ -53,7 +54,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["torch", "transformers", "tensorflow", "numpy", "PIL"],
+    excludes=["torch", "transformers", "tensorflow", "PIL"],
     noarchive=False,
     optimize=0,
 )

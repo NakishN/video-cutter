@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const twitchUrlInput = document.getElementById('twitchUrlInput');
   const whisperModelSelect = document.getElementById('whisperModelSelect');
   const summaryBackendSelect = document.getElementById('summaryBackendSelect');
+  const layoutSelect = document.getElementById('layoutSelect');
   const timestampsCheckbox = document.getElementById('timestampsCheckbox');
   const clearCacheBtn = document.getElementById('clearCacheBtn');
   
@@ -36,14 +37,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   const downloadBtn = document.getElementById('downloadBtn');
   
   // Result Tabs
+  const resTabClips = document.getElementById('resTabClips');
   const resTabSummary = document.getElementById('resTabSummary');
   const resTabTranscript = document.getElementById('resTabTranscript');
   const resTabSrt = document.getElementById('resTabSrt');
   
   // Result Panels
+  const resPanelClips = document.getElementById('resPanelClips');
   const resPanelSummary = document.getElementById('resPanelSummary');
   const resPanelTranscript = document.getElementById('resPanelTranscript');
   const resPanelSrt = document.getElementById('resPanelSrt');
+
+  // Clips specific selectors
+  const clipsGrid = document.getElementById('clipsGrid');
+  const manualStartInput = document.getElementById('manualStartInput');
+  const manualEndInput = document.getElementById('manualEndInput');
+  const manualTitleInput = document.getElementById('manualTitleInput');
+  const manualCutBtn = document.getElementById('manualCutBtn');
 
   // Result Text Contents
   const summaryText = document.getElementById('summaryText');
@@ -52,6 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let pollTimer = null;
   let selectedFile = null;
+  let currentVideoName = null;
 
   // Set buttons disabled state
   const setBusy = (busy) => {
@@ -84,13 +95,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Switch Result View Tabs
   const switchResultTab = (activeTab, activePanel) => {
-    [resTabSummary, resTabTranscript, resTabSrt].forEach(tab => tab.classList.remove('active'));
-    [resPanelSummary, resPanelTranscript, resPanelSrt].forEach(panel => panel.classList.add('hidden'));
+    [resTabClips, resTabSummary, resTabTranscript, resTabSrt].forEach(tab => {
+      if (tab) tab.classList.remove('active');
+    });
+    [resPanelClips, resPanelSummary, resPanelTranscript, resPanelSrt].forEach(panel => {
+      if (panel) panel.classList.add('hidden');
+    });
     
     activeTab.classList.add('active');
     activePanel.classList.remove('hidden');
   };
 
+  if (resTabClips) resTabClips.addEventListener('click', () => switchResultTab(resTabClips, resPanelClips));
   resTabSummary.addEventListener('click', () => switchResultTab(resTabSummary, resPanelSummary));
   resTabTranscript.addEventListener('click', () => switchResultTab(resTabTranscript, resPanelTranscript));
   resTabSrt.addEventListener('click', () => switchResultTab(resTabSrt, resPanelSrt));
@@ -204,6 +220,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     whisper_model: whisperModelSelect.value,
     summary_backend: summaryBackendSelect.value,
     with_timestamps: timestampsCheckbox.checked,
+    layout: layoutSelect.value,
   });
 
   const showProgress = (show) => {
@@ -226,6 +243,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const showResult = (data) => {
     resultSection.classList.remove('hidden');
+    currentVideoName = data.filename;
     transcriptText.textContent = data.transcript || '';
     
     const hasSrt = Boolean(data.transcript_srt);
@@ -236,11 +254,49 @@ document.addEventListener('DOMContentLoaded', async () => {
     summaryText.textContent = data.summary || '';
     resTabSummary.classList.toggle('hidden', !hasSummary);
 
-    // Default to summary if available, else transcript
-    if (hasSummary) {
-      switchResultTab(resTabSummary, resPanelSummary);
+    const opts = getOptions();
+    const isVertical = opts.layout && opts.layout.startsWith('vertical_');
+    if (isVertical) {
+      clipsGrid.classList.add('vertical-layout');
     } else {
-      switchResultTab(resTabTranscript, resPanelTranscript);
+      clipsGrid.classList.remove('vertical-layout');
+    }
+
+    // Populate Clips Grid
+    clipsGrid.innerHTML = '';
+    if (data.clips && data.clips.length > 0) {
+      resTabClips.classList.remove('hidden');
+      data.clips.forEach(clip => {
+        const card = document.createElement('div');
+        card.className = 'clip-card';
+        card.innerHTML = `
+          <div class="clip-video-wrapper">
+            <video class="clip-video" src="/output/${clip.filename}" controls preload="metadata"></video>
+          </div>
+          <div class="clip-info">
+            <div class="clip-header">
+              <span class="clip-title">${clip.title || 'Без названия'}</span>
+              ${clip.score ? `<span class="clip-score">★ ${clip.score}</span>` : ''}
+            </div>
+            <span class="clip-time">⏱ ${clip.start_str} - ${clip.end_str}</span>
+            <p class="clip-desc">${clip.description || ''}</p>
+            <div class="clip-actions">
+              <a href="/output/${clip.filename}" download class="btn btn-primary" style="flex: 1; text-decoration: none; text-align: center;">
+                📥 Скачать
+              </a>
+            </div>
+          </div>
+        `;
+        clipsGrid.appendChild(card);
+      });
+      switchResultTab(resTabClips, resPanelClips);
+    } else {
+      clipsGrid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;">Автоматические клипы не найдены. Вы можете вырезать клип вручную ниже!</div>`;
+      if (hasSummary) {
+        switchResultTab(resTabSummary, resPanelSummary);
+      } else {
+        switchResultTab(resTabTranscript, resPanelTranscript);
+      }
     }
 
     const stem = data.filename.split('.').slice(0, -1).join('.');
@@ -292,6 +348,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     form.append('whisper_model', opts.whisper_model);
     form.append('summary_backend', opts.summary_backend);
     form.append('with_timestamps', opts.with_timestamps);
+    form.append('layout', opts.layout);
 
     setBusy(true);
     try {
@@ -337,4 +394,85 @@ document.addEventListener('DOMContentLoaded', async () => {
       setBusy(false);
     }
   });
+
+  if (manualCutBtn) {
+    manualCutBtn.addEventListener('click', async () => {
+      if (!currentVideoName) {
+        alert('Сначала обработайте видеофайл!');
+        return;
+      }
+      const start = manualStartInput.value.trim();
+      const end = manualEndInput.value.trim();
+      const title = manualTitleInput.value.trim();
+      
+      if (!start || !end) {
+        alert('Пожалуйста, укажите время начала и окончания клипа!');
+        return;
+      }
+      
+      manualCutBtn.disabled = true;
+      manualCutBtn.textContent = '✂️ Нарезка...';
+      
+      try {
+        const opts = getOptions();
+        const resp = await fetch('/api/cut-manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            video_name: currentVideoName,
+            start_str: start,
+            end_str: end,
+            title: title,
+            layout: opts.layout,
+            with_timestamps: opts.with_timestamps
+          })
+        });
+        
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.detail || 'Не удалось вырезать клип');
+        }
+        
+        const { clip } = await resp.json();
+        
+        // Добавляем новый клип в начало сетки
+        const emptyMsg = clipsGrid.querySelector('div[style*="text-align: center"]');
+        if (emptyMsg) emptyMsg.remove();
+        
+        const card = document.createElement('div');
+        card.className = 'clip-card';
+        card.innerHTML = `
+          <div class="clip-video-wrapper">
+            <video class="clip-video" src="/output/${clip.filename}" controls autoplay preload="metadata"></video>
+          </div>
+          <div class="clip-info">
+            <div class="clip-header">
+              <span class="clip-title">${clip.title}</span>
+              <span class="clip-score" style="background: rgba(99, 102, 241, 0.1); color: var(--primary); border-color: rgba(99, 102, 241, 0.2)">Ручной</span>
+            </div>
+            <span class="clip-time">⏱ ${clip.start_str} - ${clip.end_str}</span>
+            <p class="clip-desc">${clip.description}</p>
+            <div class="clip-actions">
+              <a href="/output/${clip.filename}" download class="btn btn-primary" style="flex: 1; text-decoration: none; text-align: center;">
+                📥 Скачать
+              </a>
+            </div>
+          </div>
+        `;
+        clipsGrid.insertBefore(card, clipsGrid.firstChild);
+        
+        // Сбросить поля
+        manualStartInput.value = '';
+        manualEndInput.value = '';
+        manualTitleInput.value = '';
+        
+        alert('Новый клип успешно нарезан!');
+      } catch (e) {
+        alert('Ошибка при нарезке клипа: ' + e.message);
+      } finally {
+        manualCutBtn.disabled = false;
+        manualCutBtn.textContent = '✂️ Вырезать клип';
+      }
+    });
+  }
 });
