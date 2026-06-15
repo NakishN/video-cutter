@@ -60,8 +60,14 @@ def _strip_ansi(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
-def _build_yt_dlp_opts(outtmpl: str) -> dict:
-    opts: dict = {"outtmpl": outtmpl, "format": "bestaudio/best"}
+def _build_yt_dlp_opts(outtmpl: str, download_mode: str = "audio") -> dict:
+    fmt = "bestaudio/best" if download_mode == "audio" else "bestvideo+bestaudio/best"
+    opts: dict = {
+        "outtmpl": outtmpl,
+        "format": fmt,
+        "ffmpeg_location": _find_ffmpeg(),
+        "merge_output_format": "mp4" if download_mode == "video" else None
+    }
     if YTDLP_PROXY is not None:
         proxy = YTDLP_PROXY.strip()
         if proxy.lower() in ("", "direct", "none", "false", "0"):
@@ -76,12 +82,12 @@ def _is_proxy_connection_error(exc: BaseException) -> bool:
     return "connection refused" in msg or "errno 111" in msg
 
 
-def download_twitch_video(url: str, video_path: Path, job: Optional["Job"] = None) -> str:
+def download_twitch_video(url: str, video_path: Path, download_mode: str = "audio", job: Optional["Job"] = None) -> str:
     """Скачивает VOD с Twitch/YouTube; при мёртвом прокси в окружении пробует без него. Возвращает название видео."""
     from yt_dlp import YoutubeDL
 
     outtmpl = str(video_path)
-    opts = _build_yt_dlp_opts(outtmpl)
+    opts = _build_yt_dlp_opts(outtmpl, download_mode)
     force_direct = YTDLP_PROXY is not None and opts.get("proxy") == ""
 
     platform_name = "видео"
@@ -823,6 +829,7 @@ class TwitchDownloadRequest(BaseModel):
     summary_backend: str = "genapi-gpt-4-1"
     with_timestamps: bool = True
     layout: str = "vertical_reels"
+    download_mode: str = "audio"
 
 
 @app.post("/twitch")
@@ -844,7 +851,7 @@ async def download_twitch(request: TwitchDownloadRequest):
         video_path = VIDEO_DIR / f"download_{video_id}.mp4"
         job.log("Скачивание медиа...", progress=0, status="downloading")
         try:
-            title = download_twitch_video(request.url, video_path, job=job)
+            title = download_twitch_video(request.url, video_path, request.download_mode, job=job)
             # Санитизируем название видео
             safe_title = re.sub(r'[\\/*?:"<>| ]', "_", title)
             safe_title = re.sub(r'_+', '_', safe_title).strip('_')[:80]

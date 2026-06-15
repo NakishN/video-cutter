@@ -215,6 +215,18 @@ def check_nvenc_supported(ffmpeg_bin: str) -> bool:
         _has_nvenc = False
     return _has_nvenc
 
+def has_video_stream(media_path: Path, ffprobe_bin: str) -> bool:
+    """Проверяет, есть ли в медиафайле видеопоток."""
+    cmd = [
+        ffprobe_bin, "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=codec_type",
+        "-of", "default=nw=1:nk=1",
+        str(media_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return result.stdout.strip() == "video"
+
 def cut_and_crop_video(
     video_path: Path,
     start_sec: float,
@@ -230,8 +242,31 @@ def cut_and_crop_video(
     """
     Вырезает фрагмент видео, кадрирует его в соответствии с выбранным layout,
     и впекает субтитры. Использует GPU (NVENC) при наличии и разрешения,
-    иначе откатывается на CPU (libx264).
+    иначе откатывается на CPU (libx264). Если видеопотока нет, то вырезается только аудио.
     """
+    has_video = has_video_stream(video_path, ffprobe_bin)
+    
+    if not has_video:
+        # Аудио-нарезка (без видео)
+        approx_start = max(0.0, start_sec - 60.0)
+        exact_offset = start_sec - approx_start
+        duration = end_sec - start_sec
+        cmd = [
+            ffmpeg_bin, "-y",
+            "-ss", str(approx_start),
+            "-i", str(video_path),
+            "-ss", str(exact_offset),
+            "-t", str(duration),
+            "-vn",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            str(output_clip_path)
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"FFmpeg audio cut failed: {result.stderr}")
+        return
+
     video_filters = []
     filter_complex = None
     

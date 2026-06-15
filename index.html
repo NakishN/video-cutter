@@ -104,6 +104,13 @@
             <label class="field-label" for="twitchUrlInput">Ссылка на трансляцию или видео</label>
             <input type="text" id="twitchUrlInput" class="text-input" placeholder="https://www.youtube.com/watch?v=... или Twitch VOD" />
           </div>
+          <div class="form-group">
+            <label class="field-label" for="downloadModeSelect">Режим загрузки ссылки</label>
+            <select id="downloadModeSelect" class="select">
+              <option value="audio">🎵 Только аудио (быстро, без видео-клипов)</option>
+              <option value="video">🎥 Полное видео (медленнее, для нарезки видео-клипов)</option>
+            </select>
+          </div>
           <button id="downloadTwitchBtn" class="btn btn-primary">
             ⚡ Скачать и обработать ссылку
           </button>

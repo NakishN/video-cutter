@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const downloadTwitchBtn = document.getElementById('downloadTwitchBtn');
   const videoInput = document.getElementById('videoInput');
   const twitchUrlInput = document.getElementById('twitchUrlInput');
+  const downloadModeSelect = document.getElementById('downloadModeSelect');
   const whisperModelSelect = document.getElementById('whisperModelSelect');
   const summaryBackendSelect = document.getElementById('summaryBackendSelect');
   const layoutSelect = document.getElementById('layoutSelect');
@@ -380,7 +381,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const resp = await fetch('/twitch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, ...getOptions() }),
+        body: JSON.stringify({ url, download_mode: downloadModeSelect.value, ...getOptions() }),
       });
       if (!resp.ok) {
         const err = await resp.json();
