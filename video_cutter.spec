@@ -31,6 +31,8 @@ hidden = (
         "email.mime.multipart",
         "traceback",
         "platform",
+        "multipart",
+        "typing_extensions",
     ]
 )
 
