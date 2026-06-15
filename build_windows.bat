@@ -43,9 +43,9 @@ if exist "whisper.exe"  copy /Y "whisper.exe"  "%DIST%\whisper.exe"  >nul
 if exist "ffmpeg.exe"   copy /Y "ffmpeg.exe"   "%DIST%\ffmpeg.exe"   >nul
 if exist "ffprobe.exe"  copy /Y "ffprobe.exe"  "%DIST%\ffprobe.exe"  >nul
 
-if exist "models\" (
-    if not exist "%DIST%\models\" mkdir "%DIST%\models"
-    xcopy /Y /Q "models\*" "%DIST%\models\" >nul
+if exist "models" (
+    if not exist "%DIST%\models" mkdir "%DIST%\models"
+    xcopy /Y /Q "models\*" "%DIST%\models" >nul
 )
 
 if exist ".env" (

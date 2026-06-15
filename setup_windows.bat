@@ -21,7 +21,7 @@ pause & exit /b 1
 echo [OK] Python найден.
 
 :: ── 2. Виртуальное окружение и Python-зависимости ───────────
-if exist "venv\" goto venv_ok
+if exist "venv" goto venv_ok
 echo [1/4] Создание виртуального окружения...
 python -m venv venv
 
@@ -92,7 +92,7 @@ echo [3/4] whisper.exe уже есть — пропускаем.
 :: ── 5. Модель Whisper medium ─────────────────────────────────
 if exist "models\ggml-medium.bin" goto model_exists
 echo [4/4] Загрузка модели Whisper medium (~1.5 GB)...
-if not exist "models\" mkdir models
+if not exist "models" mkdir models
 powershell -NoProfile -Command ^
     "$url = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin';" ^
     "Invoke-WebRequest $url -OutFile models\ggml-medium.bin -UseBasicParsing"
