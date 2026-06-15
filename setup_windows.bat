@@ -95,7 +95,7 @@ if exist "whisper.exe" goto whisper_exists
 echo [3/4] Downloading whisper.exe (about 5 MB)...
 echo [3/4] Downloading whisper.exe >> "%LOG%"
 powershell -NoProfile -Command ^
-    "$url = 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.7.5/whisper-blas-bin-x64.zip';" ^
+    "$url = 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.6/whisper-bin-x64.zip';" ^
     "Invoke-WebRequest $url -OutFile whisper_tmp.zip -UseBasicParsing" >> "%LOG%" 2>&1
 if errorlevel 1 goto whisper_download_fail
 
