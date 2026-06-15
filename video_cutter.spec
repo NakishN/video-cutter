@@ -15,6 +15,8 @@ hidden = (
     + collect_submodules("anyio")
     + collect_submodules("httpx")
     + collect_submodules("yt_dlp")
+    + collect_submodules("faster_whisper")
+    + collect_submodules("ctranslate2")
     + [
         "uvicorn.logging",
         "uvicorn.loops",
@@ -33,7 +35,18 @@ hidden = (
         "platform",
         "multipart",
         "typing_extensions",
+        "onnxruntime",
+        "tokenizers",
+        "huggingface_hub",
     ]
+)
+
+collected_datas = (
+    collect_data_files("faster_whisper")
+    + collect_data_files("ctranslate2")
+    + collect_data_files("tokenizers")
+    + collect_data_files("huggingface_hub")
+    + collect_data_files("cv2")
 )
 
 a = Analysis(
@@ -53,7 +66,7 @@ a = Analysis(
         ("video_utils.py", "."),
         # .env.example — подсказка пользователю
         (".env.example", "."),
-    ],
+    ] + collected_datas,
     hiddenimports=hidden,
     hookspath=[],
     hooksconfig={},
