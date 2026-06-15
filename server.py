@@ -152,7 +152,7 @@ async def download_twitch(request: TwitchDownloadRequest):
         except Exception as e:
             raise RuntimeError(f"Скачивание yt_dlp завершилось с ошибкой: {e}") from e
         
-        job.log("Скачивание завершено", progress=1)
+        job.log("Скачивание завершено", progress=100)
         return process_media(
             video_path,
             whisper_model_id=request.whisper_model,

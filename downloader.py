@@ -43,10 +43,55 @@ def download_twitch_video(url: str, video_path: Path, download_mode: str = "audi
     elif "youtube" in url.lower() or "youtu.be" in url.lower():
         platform_name = "YouTube"
 
+    def make_progress_hook(job_obj):
+        last_update = [0.0]
+        last_pct = [-1]
+        
+        def hook(d):
+            if d['status'] == 'downloading':
+                downloaded = d.get('downloaded_bytes', 0)
+                total = d.get('total_bytes') or d.get('total_bytes_estimate')
+                
+                pct_val = 0
+                percent_str = ""
+                if total:
+                    pct_val = int(downloaded / total * 100)
+                    percent_str = f"{pct_val}%"
+                else:
+                    raw_pct = d.get('_percent_str')
+                    if raw_pct:
+                        percent_str = re.sub(r"\x1b\[[0-9;]*m", "", raw_pct).strip()
+                        match = re.search(r'([0-9.]+)%', percent_str)
+                        if match:
+                            try:
+                                pct_val = int(float(match.group(1)))
+                            except ValueError:
+                                pass
+                
+                now = time.time()
+                # Обновляем не чаще раза в секунду или при изменении процента
+                if now - last_update[0] >= 1.0 or pct_val != last_pct[0]:
+                    last_update[0] = now
+                    last_pct[0] = pct_val
+                    
+                    speed = re.sub(r"\x1b\[[0-9;]*m", "", d.get('_speed_str', '')).strip()
+                    eta = re.sub(r"\x1b\[[0-9;]*m", "", d.get('_eta_str', '')).strip()
+                    
+                    msg = f"Скачивание: {percent_str}" if percent_str else "Скачивание..."
+                    if speed:
+                        msg += f" ({speed})"
+                    if eta:
+                        msg += f" ETA: {eta}"
+                    
+                    job_obj.log(msg, progress=pct_val, status="downloading")
+        return hook
+
     def _run(use_direct: bool) -> str:
         run_opts = dict(opts)
         if use_direct:
             run_opts["proxy"] = ""
+        if job:
+            run_opts["progress_hooks"] = [make_progress_hook(job)]
         ctx = _without_system_proxy() if use_direct else nullcontext()
         with ctx:
             with YoutubeDL(run_opts) as ydl:
@@ -56,10 +101,10 @@ def download_twitch_video(url: str, video_path: Path, download_mode: str = "audi
     try:
         if force_direct:
             if job:
-                job.log(f"Скачивание с {platform_name} (без прокси)…")
+                job.log(f"Скачивание с {platform_name} (без прокси)…", progress=0, status="downloading")
             return _run(use_direct=True)
         if job:
-            job.log(f"Скачивание с {platform_name}…")
+            job.log(f"Скачивание с {platform_name}…", progress=0, status="downloading")
         return _run(use_direct=False)
     except Exception as first_error:
         if not _is_proxy_connection_error(first_error):

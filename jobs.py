@@ -30,6 +30,10 @@ class Job:
                 self.progress = max(0, min(100, progress))
             if status is not None:
                 self.status = status
+            
+            # Вывод в консоль для .exe/терминала
+            prog_str = f" [{self.progress}%]" if self.progress > 0 or progress is not None else ""
+            print(f"[Задача {self.id}] [{self.status}]{prog_str} {line}", flush=True)
 
     def to_dict(self) -> dict:
         with _jobs_lock:

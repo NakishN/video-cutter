@@ -33,6 +33,10 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 TMP_DIR.mkdir(parents=True, exist_ok=True)
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
+import tempfile
+tempfile.tempdir = str(TMP_DIR.resolve())
+
+
 USE_GPU = cfg.get("use_gpu", False)
 WHISPER_LANGUAGE = cfg.get("whisper_language", "ru")
 GEN_API_KEY = os.getenv("GEN_API_KEY", "")

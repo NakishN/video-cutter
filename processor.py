@@ -55,10 +55,11 @@ def process_media(
             clips_info = sorted(clips_info, key=lambda x: x.get("start_sec", 0))
 
         if job:
-            job.log(f"Нарезаем {len(clips_info)} лучших клипов...", progress=95, status="cutting")
+            job.log(f"Нарезаем {len(clips_info)} лучших клипов...", progress=90, status="cutting")
         for i, clip in enumerate(clips_info, 1):
+            pct = 90 + int((i / len(clips_info)) * 9)
             if job:
-                job.log(f"Нарезка клипа {i}/{len(clips_info)}: {clip['title']}")
+                job.log(f"Нарезка клипа {i}/{len(clips_info)}: {clip['title']}", progress=pct, status="cutting")
             clip_srt_path = TMP_DIR / f"{media_path.stem}_clip_{i}.srt"
             clip_subtitles = extract_subtitles_for_clip(transcript_srt, clip["start_sec"], clip["end_sec"])
             clip_srt_path.write_text(clip_subtitles, encoding="utf-8")
