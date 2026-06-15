@@ -29,6 +29,8 @@ hidden = (
         "dotenv",
         "email.mime.text",
         "email.mime.multipart",
+        "traceback",
+        "platform",
     ]
 )
 

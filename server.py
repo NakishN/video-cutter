@@ -758,6 +758,28 @@ def _run_job(
             job.progress = 100
             job.message = "Готово"
     except Exception as e:
+        import traceback
+        print(f"\n[JOB ERROR] Background task {job.id} failed: {e}")
+        traceback.print_exc()
+        
+        try:
+            report_file = ROOT / f"job_crash_{job.id}.txt"
+            with report_file.open("w", encoding="utf-8") as rf:
+                rf.write("============================================================\n")
+                rf.write("              BACKGROUND TASK JOB CRASH REPORT              \n")
+                rf.write("============================================================\n")
+                rf.write(f"Job ID: {job.id}\n")
+                rf.write(f"Status: {job.status}\n")
+                rf.write(f"Progress: {job.progress}%\n")
+                rf.write(f"Current Message: {job.message}\n")
+                rf.write(f"Error Message: {e}\n\n")
+                rf.write("--- TRACEBACK ---\n")
+                rf.write(traceback.format_exc())
+                rf.write("\n============================================================\n")
+            print(f"[JOB ERROR] Detailed crash report saved to: {report_file.absolute()}")
+        except Exception as log_err:
+            print(f"[JOB ERROR] Failed to write job crash report: {log_err}")
+
         with _jobs_lock:
             job.status = "error"
             job.error = str(e)
