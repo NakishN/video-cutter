@@ -13,4 +13,4 @@ for var in ALL_PROXY all_proxy HTTP_PROXY http_proxy HTTPS_PROXY https_proxy \
 done
 
 source venv/bin/activate
-exec uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+exec uvicorn server:app --host 0.0.0.0 --port 8000 --loop asyncio

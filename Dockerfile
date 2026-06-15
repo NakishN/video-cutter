@@ -39,7 +39,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Исходный код приложения
-COPY server.py genapi_client.py transcript_utils.py ./
+COPY *.py ./
 COPY config.json .env.example ./
 COPY index.html styles.css app.js ./
 COPY static/ ./static/

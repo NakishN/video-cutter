@@ -1,0 +1,130 @@
+============================================================
+              BACKGROUND TASK JOB CRASH REPORT              
+============================================================
+Job ID: c21775c1eb01
+Status: downloading
+Progress: 0%
+Current Message: Скачивание с Twitch…
+Error Message: Скачивание yt_dlp завершилось с ошибкой: ERROR: [twitch:vod] 2796702385: Failed to download m3u8 information: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000) (caused by SSLError('[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000)')); please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+--- TRACEBACK ---
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/urllib/request.py", line 1344, in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+  File "/usr/lib/python3.12/http/client.py", line 1356, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+  File "/usr/lib/python3.12/http/client.py", line 1402, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+  File "/usr/lib/python3.12/http/client.py", line 1351, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/usr/lib/python3.12/http/client.py", line 1111, in _send_output
+    self.send(msg)
+  File "/usr/lib/python3.12/http/client.py", line 1055, in send
+    self.connect()
+  File "/usr/lib/python3.12/http/client.py", line 1497, in connect
+    self.sock = self._context.wrap_socket(self.sock,
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/ssl.py", line 455, in wrap_socket
+    return self.sslsocket_class._create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/ssl.py", line 1042, in _create
+    self.do_handshake()
+  File "/usr/lib/python3.12/ssl.py", line 1320, in do_handshake
+    self._sslobj.do_handshake()
+ssl.SSLEOFError: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 912, in _request_webpage
+    return self._downloader.urlopen(self._create_request(url_or_request, data, headers, query, extensions))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 4260, in urlopen
+    return self._request_director.send(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/networking/common.py", line 117, in send
+    response = handler.send(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/networking/_helper.py", line 194, in wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/networking/common.py", line 359, in send
+    return self._send(request)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/networking/_urllib.py", line 433, in _send
+    handle_response_read_exceptions(cause)
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/networking/_urllib.py", line 347, in handle_response_read_exceptions
+    handle_sslerror(e)
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/networking/_urllib.py", line 340, in handle_sslerror
+    raise SSLError(cause=e) from e
+yt_dlp.networking.exceptions.SSLError: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1698, in wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1833, in __extract_info
+    ie_result = ie.extract(url)
+                ^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 765, in extract
+    ie_result = self._real_extract(url)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/extractor/twitch.py", line 579, in _real_extract
+    formats = self._extract_twitch_m3u8_formats(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/extractor/twitch.py", line 193, in _extract_twitch_m3u8_formats
+    formats = self._extract_m3u8_formats(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 2173, in _extract_m3u8_formats
+    fmts, subs = self._extract_m3u8_formats_and_subtitles(*args, **kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 2198, in _extract_m3u8_formats_and_subtitles
+    response = self._request_webpage(
+               ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/extractor/common.py", line 925, in _request_webpage
+    raise ExtractorError(errmsg, cause=err)
+yt_dlp.utils.ExtractorError: [twitch:vod] 2796702385: Failed to download m3u8 information: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000) (caused by SSLError('[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000)')); please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/nwk/Рабочий стол/Нарезчик видео/downloader.py", line 63, in download_twitch_video
+    return _run(use_direct=False)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/downloader.py", line 53, in _run
+    info = ydl.extract_info(url, download=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1687, in extract_info
+    return self.__extract_info(url, self.get_info_extractor(key), download, extra_info, process)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1716, in wrapper
+    self.report_error(str(e), e.format_traceback())
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1154, in report_error
+    self.trouble(f'{self._format_err("ERROR:", self.Styles.ERROR)} {message}', *args, **kwargs)
+  File "/home/nwk/Рабочий стол/Нарезчик видео/venv/lib/python3.12/site-packages/yt_dlp/YoutubeDL.py", line 1093, in trouble
+    raise DownloadError(message, exc_info)
+yt_dlp.utils.DownloadError: ERROR: [twitch:vod] 2796702385: Failed to download m3u8 information: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000) (caused by SSLError('[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000)')); please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/nwk/Рабочий стол/Нарезчик видео/server.py", line 138, in work
+    title = download_twitch_video(request.url, video_path, request.download_mode, job=job)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/downloader.py", line 66, in download_twitch_video
+    raise RuntimeError(_strip_ansi(str(first_error))) from first_error
+RuntimeError: ERROR: [twitch:vod] 2796702385: Failed to download m3u8 information: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000) (caused by SSLError('[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000)')); please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/nwk/Рабочий стол/Нарезчик видео/processor.py", line 112, in _run_job
+    result = work()
+             ^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/server.py", line 153, in work
+    raise RuntimeError(f"Скачивание yt_dlp завершилось с ошибкой: {e}") from e
+RuntimeError: Скачивание yt_dlp завершилось с ошибкой: ERROR: [twitch:vod] 2796702385: Failed to download m3u8 information: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000) (caused by SSLError('[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000)')); please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+
+============================================================

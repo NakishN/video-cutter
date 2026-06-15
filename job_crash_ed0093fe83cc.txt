@@ -1,0 +1,28 @@
+============================================================
+              BACKGROUND TASK JOB CRASH REPORT              
+============================================================
+Job ID: ed0093fe83cc
+Status: extracting_audio
+Progress: 1%
+Current Message: Извлечение аудио из видео…
+Error Message: ffmpeg audio extraction failed
+
+--- TRACEBACK ---
+Traceback (most recent call last):
+  File "/home/nwk/Рабочий стол/Нарезчик видео/processor.py", line 112, in _run_job
+    result = work()
+             ^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/server.py", line 76, in <lambda>
+    lambda: process_media(
+            ^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/processor.py", line 34, in process_media
+    transcript, transcript_srt = run_whisper(
+                                 ^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/transcriber.py", line 160, in run_whisper
+    audio_path = extract_audio(video_path, job=job)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nwk/Рабочий стол/Нарезчик видео/transcriber.py", line 56, in extract_audio
+    raise RuntimeError("ffmpeg audio extraction failed")
+RuntimeError: ffmpeg audio extraction failed
+
+============================================================

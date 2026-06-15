@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', async () => {
+const initApp = async () => {
   // Selectors
   const processBtn = document.getElementById('processBtn');
   const downloadTwitchBtn = document.getElementById('downloadTwitchBtn');
@@ -67,32 +67,37 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Set buttons disabled state
   const setBusy = (busy) => {
-    processBtn.disabled = busy;
-    downloadTwitchBtn.disabled = busy;
-    clearCacheBtn.disabled = busy;
-    if (busy) {
-      processBtn.style.opacity = '0.6';
-      downloadTwitchBtn.style.opacity = '0.6';
-    } else {
-      processBtn.style.opacity = '1';
-      downloadTwitchBtn.style.opacity = '1';
+    if (processBtn) {
+      processBtn.disabled = busy;
+      processBtn.style.opacity = busy ? '0.6' : '1';
+    }
+    if (downloadTwitchBtn) {
+      downloadTwitchBtn.disabled = busy;
+      downloadTwitchBtn.style.opacity = busy ? '0.6' : '1';
+    }
+    if (clearCacheBtn) {
+      clearCacheBtn.disabled = busy;
     }
   };
 
   // Switch Input Source Tabs
-  tabLocalBtn.addEventListener('click', () => {
-    tabLocalBtn.classList.add('active');
-    tabWebBtn.classList.remove('active');
-    panelLocal.classList.remove('hidden');
-    panelWeb.classList.add('hidden');
-  });
+  if (tabLocalBtn) {
+    tabLocalBtn.addEventListener('click', () => {
+      tabLocalBtn.classList.add('active');
+      if (tabWebBtn) tabWebBtn.classList.remove('active');
+      if (panelLocal) panelLocal.classList.remove('hidden');
+      if (panelWeb) panelWeb.classList.add('hidden');
+    });
+  }
 
-  tabWebBtn.addEventListener('click', () => {
-    tabWebBtn.classList.add('active');
-    tabLocalBtn.classList.remove('active');
-    panelWeb.classList.remove('hidden');
-    panelLocal.classList.add('hidden');
-  });
+  if (tabWebBtn) {
+    tabWebBtn.addEventListener('click', () => {
+      tabWebBtn.classList.add('active');
+      if (tabLocalBtn) tabLocalBtn.classList.remove('active');
+      if (panelWeb) panelWeb.classList.remove('hidden');
+      if (panelLocal) panelLocal.classList.add('hidden');
+    });
+  }
 
   // Switch Result View Tabs
   const switchResultTab = (activeTab, activePanel) => {
@@ -103,57 +108,64 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (panel) panel.classList.add('hidden');
     });
     
-    activeTab.classList.add('active');
-    activePanel.classList.remove('hidden');
+    if (activeTab) activeTab.classList.add('active');
+    if (activePanel) activePanel.classList.remove('hidden');
   };
 
   if (resTabClips) resTabClips.addEventListener('click', () => switchResultTab(resTabClips, resPanelClips));
-  resTabSummary.addEventListener('click', () => switchResultTab(resTabSummary, resPanelSummary));
-  resTabTranscript.addEventListener('click', () => switchResultTab(resTabTranscript, resPanelTranscript));
-  resTabSrt.addEventListener('click', () => switchResultTab(resTabSrt, resPanelSrt));
+  if (resTabSummary) resTabSummary.addEventListener('click', () => switchResultTab(resTabSummary, resPanelSummary));
+  if (resTabTranscript) resTabTranscript.addEventListener('click', () => switchResultTab(resTabTranscript, resPanelTranscript));
+  if (resTabSrt) resTabSrt.addEventListener('click', () => switchResultTab(resTabSrt, resPanelSrt));
 
   // Drag and Drop implementation
-  dropZone.addEventListener('click', () => videoInput.click());
+  if (dropZone) {
+    dropZone.addEventListener('click', () => videoInput && videoInput.click());
 
-  dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.classList.add('dragover');
-  });
-
-  ['dragleave', 'dragend'].forEach(type => {
-    dropZone.addEventListener(type, () => {
-      dropZone.classList.remove('dragover');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
     });
-  });
 
-  dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('dragover');
-    if (e.dataTransfer.files.length) {
-      handleFileSelection(e.dataTransfer.files[0]);
-    }
-  });
+    ['dragleave', 'dragend'].forEach(type => {
+      dropZone.addEventListener(type, () => {
+        dropZone.classList.remove('dragover');
+      });
+    });
 
-  videoInput.addEventListener('change', () => {
-    if (videoInput.files.length) {
-      handleFileSelection(videoInput.files[0]);
-    }
-  });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        handleFileSelection(e.dataTransfer.files[0]);
+      }
+    });
+  }
+
+  if (videoInput) {
+    videoInput.addEventListener('change', () => {
+      if (videoInput.files.length) {
+        handleFileSelection(videoInput.files[0]);
+      }
+    });
+  }
 
   const handleFileSelection = (file) => {
     selectedFile = file;
-    dropZoneText.classList.add('hidden');
-    dropZoneFileInfo.classList.remove('hidden');
-    
-    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-    dropZoneFileInfo.textContent = `Выбран файл: ${file.name} (${sizeMb} MB)`;
+    if (dropZoneText) dropZoneText.classList.add('hidden');
+    if (dropZoneFileInfo) {
+      dropZoneFileInfo.classList.remove('hidden');
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      dropZoneFileInfo.textContent = `Выбран файл: ${file.name} (${sizeMb} MB)`;
+    }
   };
 
   // Copy to clipboard buttons
   document.querySelectorAll('.btn-copy').forEach(btn => {
     btn.addEventListener('click', () => {
       const targetId = btn.getAttribute('data-target');
-      const text = document.getElementById(targetId).textContent;
+      const targetEl = document.getElementById(targetId);
+      if (!targetEl) return;
+      const text = targetEl.textContent;
       if (!text) return;
       
       navigator.clipboard.writeText(text).then(() => {
@@ -171,25 +183,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Clear cache button action
-  clearCacheBtn.addEventListener('click', async () => {
-    if (!confirm('Вы действительно хотите очистить кэш скачанных видео, аудио и результатов?')) {
-      return;
-    }
-    setBusy(true);
-    try {
-      const resp = await fetch('/api/clear-cache', { method: 'POST' });
-      if (!resp.ok) throw new Error('Не удалось очистить кэш');
-      const data = await resp.json();
-      alert(`Кэш очищен! Освобождено: ${data.cleaned_mb} MB`);
-    } catch (e) {
-      alert('Ошибка при очистке кэша: ' + e.message);
-    } finally {
-      setBusy(false);
-    }
-  });
+  if (clearCacheBtn) {
+    clearCacheBtn.addEventListener('click', async () => {
+      if (!confirm('Вы действительно хотите очистить кэш скачанных видео, аудио и результатов?')) {
+        return;
+      }
+      setBusy(true);
+      try {
+        const resp = await fetch('/api/clear-cache', { method: 'POST' });
+        if (!resp.ok) throw new Error('Не удалось очистить кэш');
+        const data = await resp.json();
+        alert(`Кэш очищен! Освобождено: ${data.cleaned_mb} MB`);
+      } catch (e) {
+        alert('Ошибка при очистке кэша: ' + e.message);
+      } finally {
+        setBusy(false);
+      }
+    });
+  }
 
   // Populate drop downs and status badges
   const fillSelect = (select, items, defaultId) => {
+    if (!select) return;
     select.innerHTML = '';
     for (const item of items) {
       const opt = document.createElement('option');
@@ -207,10 +222,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     fillSelect(summaryBackendSelect, options.summary_backends, options.default_summary);
     
     // Set status badges
-    if (options.whisper_gpu) {
+    if (options.whisper_gpu && gpuStatus) {
       gpuStatus.classList.add('active');
     }
-    if (options.genapi_configured) {
+    if (options.genapi_configured && genapiStatus) {
       genapiStatus.classList.add('active');
     }
   } catch (e) {
@@ -218,14 +233,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   const getOptions = () => ({
-    whisper_model: whisperModelSelect.value,
-    summary_backend: summaryBackendSelect.value,
-    with_timestamps: timestampsCheckbox.checked,
-    layout: layoutSelect.value,
+    whisper_model: whisperModelSelect ? whisperModelSelect.value : null,
+    summary_backend: summaryBackendSelect ? summaryBackendSelect.value : null,
+    with_timestamps: timestampsCheckbox ? timestampsCheckbox.checked : true,
+    layout: layoutSelect ? layoutSelect.value : 'vertical_reels',
   });
 
   const showProgress = (show) => {
-    progressSection.classList.toggle('hidden', !show);
+    if (progressSection) progressSection.classList.toggle('hidden', !show);
     if (!show && pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;
@@ -233,78 +248,84 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   const updateProgress = (data) => {
-    progressBar.style.width = `${data.progress}%`;
-    progressPctText.textContent = `${data.progress}%`;
-    progressMessage.textContent = data.message || '…';
-    if (data.log_lines?.length) {
+    if (progressBar) progressBar.style.width = `${data.progress}%`;
+    if (progressPctText) progressPctText.textContent = `${data.progress}%`;
+    if (progressMessage) progressMessage.textContent = data.message || '…';
+    if (data.log_lines?.length && progressLog) {
       progressLog.textContent = data.log_lines.join('\n');
       progressLog.scrollTop = progressLog.scrollHeight;
     }
   };
 
   const showResult = (data) => {
-    resultSection.classList.remove('hidden');
+    if (resultSection) resultSection.classList.remove('hidden');
     currentVideoName = data.filename;
-    transcriptText.textContent = data.transcript || '';
+    if (transcriptText) transcriptText.textContent = data.transcript || '';
     
     const hasSrt = Boolean(data.transcript_srt);
-    srtText.textContent = data.transcript_srt || '';
-    resTabSrt.classList.toggle('hidden', !hasSrt);
+    if (srtText) srtText.textContent = data.transcript_srt || '';
+    if (resTabSrt) resTabSrt.classList.toggle('hidden', !hasSrt);
 
     const hasSummary = Boolean(data.summary);
-    summaryText.textContent = data.summary || '';
-    resTabSummary.classList.toggle('hidden', !hasSummary);
+    if (summaryText) summaryText.textContent = data.summary || '';
+    if (resTabSummary) resTabSummary.classList.toggle('hidden', !hasSummary);
 
     const opts = getOptions();
     const isVertical = opts.layout && opts.layout.startsWith('vertical_');
-    if (isVertical) {
+    if (isVertical && clipsGrid) {
       clipsGrid.classList.add('vertical-layout');
-    } else {
+    } else if (clipsGrid) {
       clipsGrid.classList.remove('vertical-layout');
     }
 
     // Populate Clips Grid
-    clipsGrid.innerHTML = '';
-    if (data.clips && data.clips.length > 0) {
-      resTabClips.classList.remove('hidden');
-      data.clips.forEach(clip => {
-        const card = document.createElement('div');
-        card.className = 'clip-card';
-        card.innerHTML = `
-          <div class="clip-video-wrapper">
-            <video class="clip-video" src="/output/${clip.filename}" controls preload="metadata"></video>
-          </div>
-          <div class="clip-info">
-            <div class="clip-header">
-              <span class="clip-title">${clip.title || 'Без названия'}</span>
-              ${clip.score ? `<span class="clip-score">★ ${clip.score}</span>` : ''}
+    if (clipsGrid) {
+      clipsGrid.innerHTML = '';
+      if (data.clips && data.clips.length > 0) {
+        if (resTabClips) resTabClips.classList.remove('hidden');
+        data.clips.forEach(clip => {
+          const card = document.createElement('div');
+          card.className = 'clip-card';
+          card.innerHTML = `
+            <div class="clip-video-wrapper">
+              <video class="clip-video" src="/output/${clip.filename}" controls preload="metadata"></video>
             </div>
-            <span class="clip-time">⏱ ${clip.start_str} - ${clip.end_str}</span>
-            <p class="clip-desc">${clip.description || ''}</p>
-            <div class="clip-actions">
-              <a href="/output/${clip.filename}" download class="btn btn-primary" style="flex: 1; text-decoration: none; text-align: center;">
-                📥 Скачать
-              </a>
+            <div class="clip-info">
+              <div class="clip-header">
+                <span class="clip-title">${clip.title || 'Без названия'}</span>
+                ${clip.score ? `<span class="clip-score">★ ${clip.score}</span>` : ''}
+              </div>
+              <span class="clip-time">⏱ ${clip.start_str} - ${clip.end_str}</span>
+              <p class="clip-desc">${clip.description || ''}</p>
+              <div class="clip-actions">
+                <a href="/output/${clip.filename}" download class="btn btn-primary" style="flex: 1; text-decoration: none; text-align: center;">
+                  📥 Скачать
+                </a>
+              </div>
             </div>
-          </div>
-        `;
-        clipsGrid.appendChild(card);
-      });
-      switchResultTab(resTabClips, resPanelClips);
-    } else {
-      clipsGrid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;">Автоматические клипы не найдены. Вы можете вырезать клип вручную ниже!</div>`;
-      if (hasSummary) {
-        switchResultTab(resTabSummary, resPanelSummary);
+          `;
+          clipsGrid.appendChild(card);
+        });
+        switchResultTab(resTabClips, resPanelClips);
       } else {
-        switchResultTab(resTabTranscript, resPanelTranscript);
+        clipsGrid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;">Автоматические клипы не найдены. Вы можете вырезать клип вручную ниже!</div>`;
+        if (hasSummary) {
+          switchResultTab(resTabSummary, resPanelSummary);
+        } else {
+          switchResultTab(resTabTranscript, resPanelTranscript);
+        }
       }
     }
 
-    const stem = data.filename.split('.').slice(0, -1).join('.');
-    downloadBtn.onclick = () => { window.location.href = `/download/${stem}`; };
+    if (downloadBtn) {
+      const stem = data.filename.split('.').slice(0, -1).join('.');
+      downloadBtn.onclick = () => { window.location.href = `/download/${stem}`; };
+    }
     
     // Scroll to results
-    resultSection.scrollIntoView({ behavior: 'smooth' });
+    if (resultSection) {
+      resultSection.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   const waitForJob = (jobId) => new Promise((resolve, reject) => {
@@ -342,59 +363,107 @@ document.addEventListener('DOMContentLoaded', async () => {
     pollTimer = setInterval(poll, 1500);
   });
 
-  const uploadFile = async (file) => {
-    const form = new FormData();
-    form.append('file', file);
-    const opts = getOptions();
-    form.append('whisper_model', opts.whisper_model);
-    form.append('summary_backend', opts.summary_backend);
-    form.append('with_timestamps', opts.with_timestamps);
-    form.append('layout', opts.layout);
+  const uploadFile = (file) => {
+    return new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append('file', file);
+      const opts = getOptions();
+      form.append('whisper_model', opts.whisper_model);
+      form.append('summary_backend', opts.summary_backend);
+      form.append('with_timestamps', opts.with_timestamps);
+      form.append('layout', opts.layout);
 
-    setBusy(true);
-    try {
-      const resp = await fetch('/process', { method: 'POST', body: form });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.detail || 'Не удалось отправить файл');
-      }
-      const { job_id } = await resp.json();
-      showResult(await waitForJob(job_id));
-    } catch (e) {
-      alert('Ошибка при обработке файла: ' + e.message);
-    } finally {
-      setBusy(false);
-    }
+      setBusy(true);
+      showProgress(true);
+      resultSection.classList.add('hidden');
+      progressBar.style.width = '0%';
+      progressPctText.textContent = '0%';
+      progressMessage.textContent = 'Подготовка к загрузке...';
+      progressLog.textContent = 'Запуск загрузки файла...';
+
+      const xhr = new XMLHttpRequest();
+      
+      // Отслеживание прогресса загрузки
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = Math.round((event.loaded / event.total) * 100);
+          progressBar.style.width = `${percentComplete}%`;
+          progressPctText.textContent = `${percentComplete}%`;
+          progressMessage.textContent = `Загрузка файла на сервер: ${percentComplete}%`;
+          progressLog.textContent = `Отправлено: ${(event.loaded / (1024 * 1024)).toFixed(1)} MB из ${(event.total / (1024 * 1024)).toFixed(1)} MB...`;
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            resolve(data.job_id);
+          } catch (err) {
+            reject(new Error('Не удалось прочитать ответ сервера'));
+          }
+        } else {
+          let errMsg = 'Не удалось отправить файл';
+          try {
+            const errJson = JSON.parse(xhr.responseText);
+            errMsg = errJson.detail || errMsg;
+          } catch (e) {}
+          reject(new Error(errMsg));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('Ошибка сети при загрузке файла'));
+      };
+
+      xhr.open('POST', '/process');
+      xhr.send(form);
+    });
   };
 
-  processBtn.addEventListener('click', () => {
-    if (selectedFile) uploadFile(selectedFile);
-    else alert('Пожалуйста, выберите или перетащите файл');
-  });
-
-  downloadTwitchBtn.addEventListener('click', async () => {
-    const url = twitchUrlInput.value.trim();
-    if (!url) { alert('Пожалуйста, введите URL-ссылку на видео'); return; }
-
-    setBusy(true);
-    try {
-      const resp = await fetch('/twitch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, download_mode: downloadModeSelect.value, ...getOptions() }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.detail || 'Не удалось обработать ссылку');
+  if (processBtn) {
+    processBtn.addEventListener('click', async () => {
+      if (!selectedFile) {
+        alert('Пожалуйста, выберите или перетащите файл');
+        return;
       }
-      const { job_id } = await resp.json();
-      showResult(await waitForJob(job_id));
-    } catch (e) {
-      alert('Ошибка: ' + e.message);
-    } finally {
-      setBusy(false);
-    }
-  });
+      try {
+        const jobId = await uploadFile(selectedFile);
+        showResult(await waitForJob(jobId));
+      } catch (e) {
+        alert('Ошибка при обработке файла: ' + e.message);
+        showProgress(false);
+      } finally {
+        setBusy(false);
+      }
+    });
+  }
+
+  if (downloadTwitchBtn) {
+    downloadTwitchBtn.addEventListener('click', async () => {
+      const url = twitchUrlInput.value.trim();
+      if (!url) { alert('Пожалуйста, введите URL-ссылку на видео'); return; }
+
+      setBusy(true);
+      try {
+        const resp = await fetch('/twitch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, download_mode: downloadModeSelect.value, ...getOptions() }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.detail || 'Не удалось обработать ссылку');
+        }
+        const { job_id } = await resp.json();
+        showResult(await waitForJob(job_id));
+      } catch (e) {
+        alert('Ошибка: ' + e.message);
+      } finally {
+        setBusy(false);
+      }
+    });
+  }
 
   if (manualCutBtn) {
     manualCutBtn.addEventListener('click', async () => {
@@ -476,4 +545,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   }
-});
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
