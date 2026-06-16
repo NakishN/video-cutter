@@ -6,7 +6,59 @@ from pathlib import Path
 from contextlib import contextmanager, nullcontext
 from dotenv import load_dotenv
 
+# Добавляем пути к CUDA DLL на Windows для корректной работы faster-whisper/ctranslate2 на GPU
+if platform.system() == "Windows":
+    import sys
+    import site
+    
+    site_folders = [Path(sys.prefix) / "Lib" / "site-packages"]
+    try:
+        for p in site.getsitepackages():
+            site_folders.append(Path(p))
+    except Exception:
+        pass
+    try:
+        site_folders.append(Path(site.getusersitepackages()))
+    except Exception:
+        pass
+        
+    for sf in site_folders:
+        nvidia_dir = sf / "nvidia"
+        if nvidia_dir.is_dir():
+            for p in nvidia_dir.glob("**/bin"):
+                if p.is_dir():
+                    dll_dir_str = str(p.resolve())
+                    try:
+                        os.add_dll_directory(dll_dir_str)
+                    except Exception:
+                        pass
+                    os.environ["PATH"] = dll_dir_str + os.pathsep + os.environ.get("PATH", "")
+                    
+    cuda_path = os.environ.get("CUDA_PATH")
+    if cuda_path:
+        cuda_bin = Path(cuda_path) / "bin"
+        if cuda_bin.is_dir():
+            cuda_bin_str = str(cuda_bin.resolve())
+            try:
+                os.add_dll_directory(cuda_bin_str)
+            except Exception:
+                pass
+            os.environ["PATH"] = cuda_bin_str + os.pathsep + os.environ.get("PATH", "")
+            
+    default_cuda_root = Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA")
+    if default_cuda_root.is_dir():
+        for version_dir in default_cuda_root.glob("v*"):
+            cuda_bin = version_dir / "bin"
+            if cuda_bin.is_dir():
+                cuda_bin_str = str(cuda_bin.resolve())
+                try:
+                    os.add_dll_directory(cuda_bin_str)
+                except Exception:
+                    pass
+                os.environ["PATH"] = cuda_bin_str + os.pathsep + os.environ.get("PATH", "")
+
 load_dotenv()
+
 
 # APP_ROOT задаётся launcher.py при запуске как .exe (PyInstaller)
 ROOT = Path(os.environ.get("APP_ROOT", Path(__file__).parent))
@@ -37,7 +89,18 @@ import tempfile
 tempfile.tempdir = str(TMP_DIR.resolve())
 
 
-USE_GPU = cfg.get("use_gpu", False)
+# Проверяем доступность GPU (CUDA) и наличие необходимых библиотек (DLL/.so)
+USE_GPU = False
+if cfg.get("use_gpu", False):
+    try:
+        import ctranslate2
+        # get_cuda_device_count() вернет > 0, если CUDA доступна и все необходимые библиотеки (cublas, cudnn) успешно загружены.
+        if ctranslate2.get_cuda_device_count() > 0:
+            USE_GPU = True
+        else:
+            print("[INFO] CUDA-совместимые устройства не обнаружены. GPU-режим отключен, используется CPU.")
+    except Exception as e:
+        print(f"[WARNING] Не удалось инициализировать CUDA: {e}. GPU-режим отключен, используется автоматический откат на CPU.")
 WHISPER_LANGUAGE = cfg.get("whisper_language", "ru")
 GEN_API_KEY = os.getenv("GEN_API_KEY", "")
 GENAPI_NETWORK_ID = cfg.get("genapi_network_id", "gemini-2-5-flash-lite")
