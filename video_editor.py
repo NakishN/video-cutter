@@ -97,15 +97,13 @@ def cut_and_crop_video(
     
     if not has_video:
         # Аудио-нарезка (без видео)
-        approx_start = max(0.0, start_sec - 60.0)
-        exact_offset = start_sec - approx_start
         duration = end_sec - start_sec
         cmd = [
             ffmpeg_bin, "-y",
-            "-ss", str(approx_start),
+            "-ss", str(start_sec),
             "-i", str(video_path),
-            "-ss", str(exact_offset),
             "-t", str(duration),
+            "-async", "1",
             "-vn",
             "-c:a", "aac",
             "-b:a", "128k",
@@ -246,33 +244,29 @@ def cut_and_crop_video(
                 video_filters.append(f"subtitles='{escaped_srt}':force_style='{style}'")
             vf_arg = ",".join(video_filters)
             
-    # Двойной поиск (двойной seek) для максимальной скорости и точности:
-    # 1. Быстрый поиск до точки (start_sec - 60 секунд) перед -i
-    # 2. Точный поиск на оставшиеся секунды после -i
-    approx_start = max(0.0, start_sec - 60.0)
-    exact_offset = start_sec - approx_start
+    # Используем точный поиск перед -i (в современных версиях FFmpeg это frame-accurate)
     duration = end_sec - start_sec
 
     # Базовая часть команды для CPU
     cmd_base_cpu = [
         ffmpeg_bin, "-y",
-        "-ss", str(approx_start),
+        "-ss", str(start_sec),
         "-i", str(video_path),
-        "-ss", str(exact_offset),
         "-t", str(duration),
+        "-async", "1",
     ]
 
     attempt_gpu = use_gpu and check_nvenc_supported(ffmpeg_bin)
     
     if attempt_gpu:
-        # Для GPU добавляем аппаратное декодирование (-hwaccel cuda) перед -i
+        # Для GPU добавляем аппаратное декодирование (-hwaccel cuda)
         cmd_gpu = [
             ffmpeg_bin, "-y",
             "-hwaccel", "cuda",
-            "-ss", str(approx_start),
+            "-ss", str(start_sec),
             "-i", str(video_path),
-            "-ss", str(exact_offset),
             "-t", str(duration),
+            "-async", "1",
         ]
         
         if filter_complex:

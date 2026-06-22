@@ -43,8 +43,8 @@ def parse_summary_to_clips(summary_text: str) -> List[Dict]:
         clips.append({
             "start_str": start_str,
             "end_str": end_str,
-            "start_sec": parse_time_to_seconds(start_str),
-            "end_sec": parse_time_to_seconds(end_str),
+            "start_sec": max(0.0, parse_time_to_seconds(start_str) - 1.5), # padding
+            "end_sec": parse_time_to_seconds(end_str) + 2.0,               # padding
             "title": title,
             "score": score,
             "description": description
