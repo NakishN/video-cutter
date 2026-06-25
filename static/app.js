@@ -8,6 +8,7 @@ const initApp = async () => {
   const whisperModelSelect = document.getElementById('whisperModelSelect');
   const summaryBackendSelect = document.getElementById('summaryBackendSelect');
   const layoutSelect = document.getElementById('layoutSelect');
+  const maxClipSecSelect = document.getElementById('maxClipSecSelect');
   const timestampsCheckbox = document.getElementById('timestampsCheckbox');
   const clearCacheBtn = document.getElementById('clearCacheBtn');
   
@@ -237,6 +238,7 @@ const initApp = async () => {
     summary_backend: summaryBackendSelect ? summaryBackendSelect.value : null,
     with_timestamps: timestampsCheckbox ? timestampsCheckbox.checked : true,
     layout: layoutSelect ? layoutSelect.value : 'vertical_reels',
+    max_clip_sec: maxClipSecSelect ? parseFloat(maxClipSecSelect.value) : 30.0,
   });
 
   const showProgress = (show) => {
@@ -286,29 +288,66 @@ const initApp = async () => {
         data.clips.forEach(clip => {
           const card = document.createElement('div');
           card.className = 'clip-card';
-          card.innerHTML = `
-            <div class="clip-video-wrapper">
-              <video class="clip-video" src="/output/${clip.filename}" controls preload="metadata"></video>
-            </div>
-            <div class="clip-info">
-              <div class="clip-header">
-                <span class="clip-title">${clip.title || 'Без названия'}</span>
-                ${clip.score ? `<span class="clip-score">★ ${clip.score}</span>` : ''}
-              </div>
-              <span class="clip-time">⏱ ${clip.start_str} - ${clip.end_str}</span>
-              <p class="clip-desc">${clip.description || ''}</p>
-              <div class="clip-actions">
-                <a href="/output/${clip.filename}" download class="btn btn-primary" style="flex: 1; text-decoration: none; text-align: center;">
-                  📥 Скачать
-                </a>
-              </div>
-            </div>
-          `;
+
+          // --- безопасное построение DOM (без innerHTML, защита от XSS) ---
+          const videoWrapper = document.createElement('div');
+          videoWrapper.className = 'clip-video-wrapper';
+          const video = document.createElement('video');
+          video.className = 'clip-video';
+          video.setAttribute('src', `/output/${encodeURIComponent(clip.filename)}`);
+          video.controls = true;
+          video.preload = 'metadata';
+          videoWrapper.appendChild(video);
+
+          const clipInfo = document.createElement('div');
+          clipInfo.className = 'clip-info';
+
+          const clipHeader = document.createElement('div');
+          clipHeader.className = 'clip-header';
+          const titleSpan = document.createElement('span');
+          titleSpan.className = 'clip-title';
+          titleSpan.textContent = clip.title || 'Без названия';
+          clipHeader.appendChild(titleSpan);
+          if (clip.score) {
+            const scoreSpan = document.createElement('span');
+            scoreSpan.className = 'clip-score';
+            scoreSpan.textContent = `★ ${clip.score}`;
+            clipHeader.appendChild(scoreSpan);
+          }
+
+          const timeSpan = document.createElement('span');
+          timeSpan.className = 'clip-time';
+          timeSpan.textContent = `⏱ ${clip.start_str} - ${clip.end_str}`;
+
+          const descP = document.createElement('p');
+          descP.className = 'clip-desc';
+          descP.textContent = clip.description || '';
+
+          const actions = document.createElement('div');
+          actions.className = 'clip-actions';
+          const dlLink = document.createElement('a');
+          dlLink.href = `/output/${encodeURIComponent(clip.filename)}`;
+          dlLink.setAttribute('download', '');
+          dlLink.className = 'btn btn-primary';
+          dlLink.style.cssText = 'flex: 1; text-decoration: none; text-align: center;';
+          dlLink.textContent = '📥 Скачать';
+          actions.appendChild(dlLink);
+
+          clipInfo.appendChild(clipHeader);
+          clipInfo.appendChild(timeSpan);
+          clipInfo.appendChild(descP);
+          clipInfo.appendChild(actions);
+
+          card.appendChild(videoWrapper);
+          card.appendChild(clipInfo);
           clipsGrid.appendChild(card);
         });
         switchResultTab(resTabClips, resPanelClips);
       } else {
-        clipsGrid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;">Автоматические клипы не найдены. Вы можете вырезать клип вручную ниже!</div>`;
+        const emptyDiv = document.createElement('div');
+        emptyDiv.style.cssText = 'grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;';
+        emptyDiv.textContent = 'Автоматические клипы не найдены. Вы можете вырезать клип вручную ниже!';
+        clipsGrid.appendChild(emptyDiv);
         if (hasSummary) {
           switchResultTab(resTabSummary, resPanelSummary);
         } else {
@@ -335,32 +374,56 @@ const initApp = async () => {
     progressPctText.textContent = '0%';
     progressLog.textContent = '';
 
-    const poll = async () => {
-      try {
-        const resp = await fetch(`/api/jobs/${jobId}`);
-        if (!resp.ok) throw new Error('Не удалось получить статус задачи');
-        const data = await resp.json();
-        updateProgress(data);
+    // SSE (Server-Sent Events) вместо polling — нет лишних HTTP-запросов
+    const evtSource = new EventSource(`/api/jobs/${jobId}/stream`);
 
+    const cleanup = () => {
+      evtSource.close();
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    };
+
+    evtSource.addEventListener('update', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        updateProgress(data);
         if (data.status === 'done') {
-          if (pollTimer) clearInterval(pollTimer);
-          pollTimer = null;
+          cleanup();
           showProgress(false);
           resolve(data.result);
         } else if (data.status === 'error') {
-          if (pollTimer) clearInterval(pollTimer);
-          pollTimer = null;
+          cleanup();
           showProgress(false);
           reject(new Error(data.error || 'Ошибка обработки'));
         }
-      } catch (e) {
-        showProgress(false);
-        reject(e);
-      }
-    };
+      } catch (err) { /* ignore parse errors */ }
+    });
 
-    poll();
-    pollTimer = setInterval(poll, 1500);
+    evtSource.onerror = () => {
+      // SSE недоступен — fallback на polling
+      evtSource.close();
+      const poll = async () => {
+        try {
+          const resp = await fetch(`/api/jobs/${jobId}`);
+          if (!resp.ok) throw new Error('Не удалось получить статус задачи');
+          const data = await resp.json();
+          updateProgress(data);
+          if (data.status === 'done') {
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            showProgress(false);
+            resolve(data.result);
+          } else if (data.status === 'error') {
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            showProgress(false);
+            reject(new Error(data.error || 'Ошибка обработки'));
+          }
+        } catch (e) {
+          showProgress(false);
+          reject(e);
+        }
+      };
+      poll();
+      pollTimer = setInterval(poll, 1500);
+    };
   });
 
   const uploadFile = (file) => {
@@ -372,6 +435,7 @@ const initApp = async () => {
       form.append('summary_backend', opts.summary_backend);
       form.append('with_timestamps', opts.with_timestamps);
       form.append('layout', opts.layout);
+      form.append('max_clip_sec', opts.max_clip_sec);
 
       setBusy(true);
       showProgress(true);
@@ -511,25 +575,60 @@ const initApp = async () => {
         
         const card = document.createElement('div');
         card.className = 'clip-card';
-        card.innerHTML = `
-          <div class="clip-video-wrapper">
-            <video class="clip-video" src="/output/${clip.filename}" controls autoplay preload="metadata"></video>
-          </div>
-          <div class="clip-info">
-            <div class="clip-header">
-              <span class="clip-title">${clip.title}</span>
-              <span class="clip-score" style="background: rgba(99, 102, 241, 0.1); color: var(--primary); border-color: rgba(99, 102, 241, 0.2)">Ручной</span>
-            </div>
-            <span class="clip-time">⏱ ${clip.start_str} - ${clip.end_str}</span>
-            <p class="clip-desc">${clip.description}</p>
-            <div class="clip-actions">
-              <a href="/output/${clip.filename}" download class="btn btn-primary" style="flex: 1; text-decoration: none; text-align: center;">
-                📥 Скачать
-              </a>
-            </div>
-          </div>
-        `;
+
+        // --- безопасное построение DOM (без innerHTML, защита от XSS) ---
+        const videoWrapper2 = document.createElement('div');
+        videoWrapper2.className = 'clip-video-wrapper';
+        const video2 = document.createElement('video');
+        video2.className = 'clip-video';
+        video2.setAttribute('src', `/output/${encodeURIComponent(clip.filename)}`);
+        video2.controls = true;
+        video2.autoplay = true;
+        video2.preload = 'metadata';
+        videoWrapper2.appendChild(video2);
+
+        const clipInfo2 = document.createElement('div');
+        clipInfo2.className = 'clip-info';
+
+        const clipHeader2 = document.createElement('div');
+        clipHeader2.className = 'clip-header';
+        const titleSpan2 = document.createElement('span');
+        titleSpan2.className = 'clip-title';
+        titleSpan2.textContent = clip.title || 'Ручной клип';
+        const scoreSpan2 = document.createElement('span');
+        scoreSpan2.className = 'clip-score';
+        scoreSpan2.style.cssText = 'background: var(--bg-main); color: var(--text-main); border-color: var(--border-color);';
+        scoreSpan2.textContent = 'Ручной';
+        clipHeader2.appendChild(titleSpan2);
+        clipHeader2.appendChild(scoreSpan2);
+
+        const timeSpan2 = document.createElement('span');
+        timeSpan2.className = 'clip-time';
+        timeSpan2.textContent = `⏱ ${clip.start_str} - ${clip.end_str}`;
+
+        const descP2 = document.createElement('p');
+        descP2.className = 'clip-desc';
+        descP2.textContent = clip.description || '';
+
+        const actions2 = document.createElement('div');
+        actions2.className = 'clip-actions';
+        const dlLink2 = document.createElement('a');
+        dlLink2.href = `/output/${encodeURIComponent(clip.filename)}`;
+        dlLink2.setAttribute('download', '');
+        dlLink2.className = 'btn btn-primary';
+        dlLink2.style.cssText = 'flex: 1; text-decoration: none; text-align: center;';
+        dlLink2.textContent = '📥 Скачать';
+        actions2.appendChild(dlLink2);
+
+        clipInfo2.appendChild(clipHeader2);
+        clipInfo2.appendChild(timeSpan2);
+        clipInfo2.appendChild(descP2);
+        clipInfo2.appendChild(actions2);
+
+        card.appendChild(videoWrapper2);
+        card.appendChild(clipInfo2);
         clipsGrid.insertBefore(card, clipsGrid.firstChild);
+
         
         // Сбросить поля
         manualStartInput.value = '';

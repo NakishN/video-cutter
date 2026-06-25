@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Optional
-from config import GEN_API_KEY, GENAPI_NETWORK_ID, SUMMARY_MODEL_PATH, cfg
+from config import GEN_API_KEY, GENAPI_NETWORK_ID, SUMMARY_MODEL_PATH, cfg, WHISPER_LANGUAGE
 from jobs import Job
 from genapi_client import summarize as genapi_summarize
 
@@ -77,7 +77,9 @@ def run_summary(
                 status="summarizing",
             )
         text = genapi_summarize(
-            transcript, GEN_API_KEY, network_id, transcript_srt=transcript_srt,
+            transcript, GEN_API_KEY, network_id,
+            transcript_srt=transcript_srt,
+            response_language=WHISPER_LANGUAGE or "Russian",
         )
         if job:
             job.log("Резюме готово", progress=99)

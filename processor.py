@@ -5,7 +5,7 @@ from config import ROOT, USE_GPU, OUTPUT_DIR, TMP_DIR, _find_ffmpeg, _find_ffpro
 from jobs import Job, _jobs_lock
 from transcriber import run_whisper, resolve_whisper_model
 from summarizer import run_summary
-from clip_utils import parse_summary_to_clips, extract_subtitles_for_clip
+from clip_utils import parse_summary_to_clips, extract_subtitles_for_clip, deduplicate_clips
 from video_editor import cut_and_crop_video
 
 def save_results(stem: str, transcript: str, transcript_srt: str, summary: str) -> None:
@@ -22,6 +22,7 @@ def process_media(
     summary_backend: str,
     with_timestamps: bool,
     layout: str = "vertical_reels",
+    max_clip_sec: float = 30.0,
     job: Optional[Job] = None,
 ) -> dict:
     from config import GEN_API_KEY
@@ -42,15 +43,19 @@ def process_media(
     save_results(media_path.stem, transcript, transcript_srt, summary)
 
     clips_list = []
-    clips_info = parse_summary_to_clips(summary)
+    clips_info = parse_summary_to_clips(
+        summary,
+        transcript_srt=transcript_srt,
+        max_clip_sec=max_clip_sec,
+    )
     if clips_info:
         # Ограничиваем количество клипов до 15 самых интересных (по оценке),
         # чтобы избежать бесконечной нарезки и переполнения диска
-        if len(clips_info) > 15:
+        if len(clips_info) > 50:
             if job:
-                job.log(f"Найдено {len(clips_info)} моментов. Выбираем 15 лучших по оценке для экономии времени...")
+                job.log(f"Найдено {len(clips_info)} моментов. Выбираем 50 лучших по оценке...")
             # Сортируем по score по убыванию
-            clips_info = sorted(clips_info, key=lambda x: x.get("score", 0), reverse=True)[:15]
+            clips_info = sorted(clips_info, key=lambda x: x.get("score", 0), reverse=True)[:50]
             # Сортируем обратно по хронологии
             clips_info = sorted(clips_info, key=lambda x: x.get("start_sec", 0))
 
@@ -116,6 +121,7 @@ def _run_job(
             job.status = "done"
             job.progress = 100
             job.message = "Готово"
+            job.finished_at = job.finished_at or __import__('time').time()
     except Exception as e:
         print(f"\n[JOB ERROR] Background task {job.id} failed: {e}")
         traceback.print_exc()
@@ -142,3 +148,4 @@ def _run_job(
             job.status = "error"
             job.error = str(e)
             job.message = f"Ошибка: {e}"
+            job.finished_at = job.finished_at or __import__('time').time()

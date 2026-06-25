@@ -1,11 +1,13 @@
+import time
 import uuid
 import threading
 from dataclasses import dataclass, field
 from typing import Optional
-from fastapi import HTTPException
 
 _jobs: dict[str, "Job"] = {}
 _jobs_lock = threading.Lock()
+
+_JOB_TTL = 3600  # секунды — завершённые задачи живут 1 час
 
 @dataclass
 class Job:
@@ -16,6 +18,7 @@ class Job:
     log_lines: list[str] = field(default_factory=list)
     result: Optional[dict] = None
     error: Optional[str] = None
+    finished_at: float = 0.0
 
     def log(self, line: str, *, progress: Optional[int] = None, status: Optional[str] = None) -> None:
         line = line.strip()
@@ -30,6 +33,8 @@ class Job:
                 self.progress = max(0, min(100, progress))
             if status is not None:
                 self.status = status
+                if status in ("done", "error") and not self.finished_at:
+                    self.finished_at = time.time()
             
             # Вывод в консоль для .exe/терминала
             prog_str = f" [{self.progress}%]" if self.progress > 0 or progress is not None else ""
@@ -47,7 +52,19 @@ class Job:
                 "error": self.error,
             }
 
+def _cleanup_old_jobs() -> None:
+    """Удаляет завершённые задачи старше _JOB_TTL секунд."""
+    now = time.time()
+    with _jobs_lock:
+        to_delete = [
+            jid for jid, j in _jobs.items()
+            if j.status in ("done", "error") and (now - j.finished_at) > _JOB_TTL
+        ]
+        for jid in to_delete:
+            del _jobs[jid]
+
 def _create_job() -> Job:
+    _cleanup_old_jobs()
     job = Job(id=uuid.uuid4().hex[:12])
     with _jobs_lock:
         _jobs[job.id] = job
@@ -57,5 +74,5 @@ def _get_job(job_id: str) -> Job:
     with _jobs_lock:
         job = _jobs.get(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Задача не найдена")
+        raise KeyError(job_id)
     return job

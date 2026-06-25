@@ -1,6 +1,7 @@
 import os
 import sys
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 import cv2
@@ -37,26 +38,29 @@ def find_optimal_crop_center_x(video_path: Path, start_sec: float, end_sec: floa
             return None
             
         face_centers_x = []
-        
-        for i in range(1, samples + 1):
-            t = start_sec + i * interval
+        timestamps = [start_sec + i * interval for i in range(1, samples + 1)]
+
+        def _extract_frame(t: float) -> Optional[bytes]:
             cmd = [
                 ffmpeg_bin, "-y", "-ss", str(t), "-i", str(video_path),
                 "-vframes", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-"
             ]
             proc = subprocess.run(cmd, capture_output=True)
-            if not proc.stdout:
+            return proc.stdout if proc.stdout else None
+
+        with ThreadPoolExecutor(max_workers=samples) as pool:
+            frames = list(pool.map(_extract_frame, timestamps))
+
+        for raw in frames:
+            if not raw:
                 continue
-            
-            np_arr = np.frombuffer(proc.stdout, np.uint8)
+            np_arr = np.frombuffer(raw, np.uint8)
             img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
             if img is None:
                 continue
-            
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(gray, 1.3, 5)
             if len(faces) > 0:
-                # Найти самое большое лицо
                 faces = sorted(faces, key=lambda x: x[2]*x[3], reverse=True)
                 x, y, w, h = faces[0]
                 face_centers_x.append(x + w//2)

@@ -100,9 +100,9 @@ def cut_and_crop_video(
         duration = end_sec - start_sec
         cmd = [
             ffmpeg_bin, "-y",
-            "-ss", str(start_sec),
             "-i", str(video_path),
-            "-t", str(duration),
+            "-ss", f"{start_sec:.3f}",
+            "-t", f"{duration:.3f}",
             "-async", "1",
             "-vn",
             "-c:a", "aac",
@@ -244,30 +244,39 @@ def cut_and_crop_video(
                 video_filters.append(f"subtitles='{escaped_srt}':force_style='{style}'")
             vf_arg = ",".join(video_filters)
             
-    # Используем точный поиск перед -i (в современных версиях FFmpeg это frame-accurate)
+    # Вычисляем параметры гибридного поиска (hybrid seeking):
+    # делаем быстрый поиск на точку за 10 секунд до начала, а оставшиеся 10 секунд ищем точно.
+    if start_sec > 15.0:
+        fast_seek = start_sec - 10.0
+        accurate_seek = 10.0
+    else:
+        fast_seek = None
+        accurate_seek = start_sec
+
     duration = end_sec - start_sec
 
     # Базовая часть команды для CPU
-    cmd_base_cpu = [
-        ffmpeg_bin, "-y",
-        "-ss", str(start_sec),
+    cmd_base_cpu = [ffmpeg_bin, "-y"]
+    if fast_seek is not None:
+        cmd_base_cpu.extend(["-ss", f"{fast_seek:.3f}"])
+    cmd_base_cpu.extend([
         "-i", str(video_path),
-        "-t", str(duration),
-        "-async", "1",
-    ]
+        "-ss", f"{accurate_seek:.3f}",
+        "-t", f"{duration:.3f}",
+    ])
 
     attempt_gpu = use_gpu and check_nvenc_supported(ffmpeg_bin)
     
     if attempt_gpu:
         # Для GPU добавляем аппаратное декодирование (-hwaccel cuda)
-        cmd_gpu = [
-            ffmpeg_bin, "-y",
-            "-hwaccel", "cuda",
-            "-ss", str(start_sec),
+        cmd_gpu = [ffmpeg_bin, "-y", "-hwaccel", "cuda"]
+        if fast_seek is not None:
+            cmd_gpu.extend(["-ss", f"{fast_seek:.3f}"])
+        cmd_gpu.extend([
             "-i", str(video_path),
-            "-t", str(duration),
-            "-async", "1",
-        ]
+            "-ss", f"{accurate_seek:.3f}",
+            "-t", f"{duration:.3f}",
+        ])
         
         if filter_complex:
             cmd_gpu.extend(["-filter_complex", filter_complex, "-map", "[v]", "-map", "0:a?"])
@@ -279,6 +288,7 @@ def cut_and_crop_video(
             "-preset", "p3",
             "-cq", "22",
             "-c:a", "aac",
+            "-af", "aresample=async=1000",
             "-b:a", "128k",
             str(output_clip_path)
         ])
@@ -300,6 +310,7 @@ def cut_and_crop_video(
         "-preset", "veryfast",
         "-crf", "22",
         "-c:a", "aac",
+        "-af", "aresample=async=1000",
         "-b:a", "128k",
         str(output_clip_path)
     ])

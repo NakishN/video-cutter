@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -22,6 +22,10 @@ from downloader import download_twitch_video
 from transcriber import list_whisper_models
 from summarizer import list_summary_backends, _default_summary_backend
 from processor import process_media, _run_job
+
+# Ограничиваем количество одновременных задач обработки
+MAX_CONCURRENT_JOBS = 3
+_job_semaphore = threading.Semaphore(MAX_CONCURRENT_JOBS)
 
 app = FastAPI()
 
@@ -54,7 +58,40 @@ async def api_options():
 
 @app.get("/api/jobs/{job_id}")
 async def get_job_status(job_id: str):
-    return _get_job(job_id).to_dict()
+    try:
+        return _get_job(job_id).to_dict()
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+@app.get("/api/jobs/{job_id}/stream")
+async def stream_job_status(job_id: str):
+    """SSE-поток статуса задачи."""
+    import json as _json
+    try:
+        _get_job(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    def event_generator():
+        while True:
+            try:
+                job = _get_job(job_id)
+            except KeyError:
+                break
+            data = _json.dumps(job.to_dict(), ensure_ascii=False)
+            yield f"event: update\ndata: {data}\n\n"
+            if job.status in ("done", "error"):
+                break
+            time.sleep(0.8)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 @app.post("/process")
 async def process_video(
@@ -63,27 +100,38 @@ async def process_video(
     summary_backend: str = Form("genapi-gpt-4-1"),
     with_timestamps: bool = Form(True),
     layout: str = Form("vertical_reels"),
+    max_clip_sec: float = Form(30.0),
 ):
     dest_path = VIDEO_DIR / Path(file.filename).name
     with dest_path.open("wb") as out_f:
         shutil.copyfileobj(file.file, out_f)
 
     job = _create_job()
-    threading.Thread(
-        target=_run_job,
-        args=(
-            job,
-            lambda: process_media(
-                dest_path,
-                whisper_model_id=whisper_model,
-                summary_backend=summary_backend,
-                with_timestamps=with_timestamps,
-                layout=layout,
-                job=job,
-            ),
-        ),
-        daemon=True,
-    ).start()
+
+    if not _job_semaphore.acquire(blocking=False):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Сервер уже обрабатывает {MAX_CONCURRENT_JOBS} задачи. Пожалуйста, подождите.",
+        )
+
+    def _run_with_semaphore():
+        try:
+            _run_job(
+                job,
+                lambda: process_media(
+                    dest_path,
+                    whisper_model_id=whisper_model,
+                    summary_backend=summary_backend,
+                    with_timestamps=with_timestamps,
+                    layout=layout,
+                    max_clip_sec=max_clip_sec,
+                    job=job,
+                ),
+            )
+        finally:
+            _job_semaphore.release()
+
+    threading.Thread(target=_run_with_semaphore, daemon=True).start()
     return {"job_id": job.id}
 
 @app.post("/process/sync")
@@ -93,6 +141,7 @@ async def process_video_sync(
     summary_backend: str = Form("genapi-gpt-4-1"),
     with_timestamps: bool = Form(True),
     layout: str = Form("vertical_reels"),
+    max_clip_sec: float = Form(30.0),
 ):
     dest_path = VIDEO_DIR / Path(file.filename).name
     with dest_path.open("wb") as out_f:
@@ -104,6 +153,7 @@ async def process_video_sync(
             summary_backend=summary_backend,
             with_timestamps=with_timestamps,
             layout=layout,
+            max_clip_sec=max_clip_sec,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -115,6 +165,7 @@ class TwitchDownloadRequest(BaseModel):
     with_timestamps: bool = True
     layout: str = "vertical_reels"
     download_mode: str = "audio"
+    max_clip_sec: float = 30.0
 
 @app.post("/twitch")
 async def download_twitch(request: TwitchDownloadRequest):
@@ -159,10 +210,23 @@ async def download_twitch(request: TwitchDownloadRequest):
             summary_backend=request.summary_backend,
             with_timestamps=request.with_timestamps,
             layout=request.layout,
+            max_clip_sec=request.max_clip_sec,
             job=job,
         )
 
-    threading.Thread(target=_run_job, args=(job, work), daemon=True).start()
+    if not _job_semaphore.acquire(blocking=False):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Сервер уже обрабатывает {MAX_CONCURRENT_JOBS} задачи. Пожалуйста, подождите.",
+        )
+
+    def _run_twitch_with_semaphore():
+        try:
+            _run_job(job, work)
+        finally:
+            _job_semaphore.release()
+
+    threading.Thread(target=_run_twitch_with_semaphore, daemon=True).start()
     return {"job_id": job.id}
 
 class ManualCutRequest(BaseModel):
