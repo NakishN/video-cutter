@@ -7,7 +7,7 @@
 
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
-# Собираем скрытые подмодули uvicorn и fastapi
+# Собираем скрытые подмодули uvicorn, fastapi и mediapipe
 hidden = (
     collect_submodules("uvicorn")
     + collect_submodules("fastapi")
@@ -17,6 +17,7 @@ hidden = (
     + collect_submodules("yt_dlp")
     + collect_submodules("faster_whisper")
     + collect_submodules("ctranslate2")
+    + collect_submodules("mediapipe")
     + [
         "uvicorn.logging",
         "uvicorn.loops",
@@ -38,6 +39,7 @@ hidden = (
         "onnxruntime",
         "tokenizers",
         "huggingface_hub",
+        "mediapipe",
     ]
 )
 
@@ -47,6 +49,7 @@ collected_datas = (
     + collect_data_files("tokenizers")
     + collect_data_files("huggingface_hub")
     + collect_data_files("cv2")
+    + collect_data_files("mediapipe")
 )
 
 a = Analysis(

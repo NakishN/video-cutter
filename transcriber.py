@@ -31,6 +31,7 @@ def extract_audio(media_path: Path, job: Optional[Job] = None) -> Path:
     cmd = [
         _find_ffmpeg(), "-y", "-i", str(media_path),
         "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+        "-af", "aresample=async=1000:min_hard_comp=0.1:first_pts=0",
         str(audio_path),
     ]
     if job:

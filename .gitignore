@@ -44,4 +44,6 @@ build/
 # Логи
 *.log
 *.zip
+job_crash_*.txt
+crash_report_*.txt
 whisper.cpp/

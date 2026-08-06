@@ -11,6 +11,32 @@ def escape_ffmpeg_subtitles_path(p: Path) -> str:
     s = s.replace("'", "'\\\\''")
     return s
 
+SUBTITLE_STYLE_PRESETS = {
+    "viral_yellow": (
+        "Fontname=Trebuchet MS,Fontsize=22,Bold=1,"
+        "PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BackColour=&H80000000,"
+        "Outline=3,Shadow=2,Alignment=2,MarginV=45"
+    ),
+    "viral_white": (
+        "Fontname=Trebuchet MS,Fontsize=22,Bold=1,"
+        "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,"
+        "Outline=3,Shadow=2,Alignment=2,MarginV=45"
+    ),
+    "box_black": (
+        "Fontname=Trebuchet MS,Fontsize=20,Bold=1,"
+        "PrimaryColour=&H00FFFFFF,BackColour=&H90000000,BorderStyle=3,"
+        "Outline=1,Alignment=2,MarginV=45"
+    ),
+    "neon_cyan": (
+        "Fontname=Trebuchet MS,Fontsize=22,Bold=1,"
+        "PrimaryColour=&H00FFFF00,OutlineColour=&H00000000,"
+        "Outline=3,Shadow=2,Alignment=2,MarginV=45"
+    ),
+}
+
+def _get_subtitle_style(preset: str = "viral_yellow") -> str:
+    return SUBTITLE_STYLE_PRESETS.get(preset, SUBTITLE_STYLE_PRESETS["viral_yellow"])
+
 def _probe_resolution(media_path: Path, ffprobe_bin: str) -> tuple[int, int]:
     """Возвращает кортеж (ширина, высота) видео."""
     cmd = [
@@ -86,7 +112,8 @@ def cut_and_crop_video(
     ffprobe_bin: str = "ffprobe",
     vtuber_center_x_percent: float = 50.0,
     layout: str = "vertical_split",
-    use_gpu: bool = True
+    use_gpu: bool = True,
+    subtitle_style_preset: str = "viral_yellow"
 ) -> None:
     """
     Вырезает фрагмент видео, кадрирует его в соответствии с выбранным layout,
@@ -116,6 +143,7 @@ def cut_and_crop_video(
 
     video_filters = []
     filter_complex = None
+    style = _get_subtitle_style(subtitle_style_preset)
     
     # Получаем исходные размеры видео
     iw, ih = _probe_resolution(video_path, ffprobe_bin)
@@ -126,11 +154,6 @@ def cut_and_crop_video(
     if is_vertical or layout == "widescreen":
         if clip_srt_path and clip_srt_path.is_file():
             escaped_srt = escape_ffmpeg_subtitles_path(clip_srt_path)
-            style = (
-                "Fontname=Arial,Fontsize=18,"
-                "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-                "Outline=2,Alignment=2,MarginV=25"
-            )
             video_filters.append(f"subtitles='{escaped_srt}':force_style='{style}'")
         vf_arg = ",".join(video_filters) if video_filters else None
     else:
@@ -146,11 +169,6 @@ def cut_and_crop_video(
             video_filters.append(f"crop={cw}:{ih}:{x_left}:0")
             if clip_srt_path and clip_srt_path.is_file():
                 escaped_srt = escape_ffmpeg_subtitles_path(clip_srt_path)
-                style = (
-                    "Fontname=Arial,Fontsize=18,"
-                    "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-                    "Outline=2,Alignment=2,MarginV=25"
-                )
                 video_filters.append(f"subtitles='{escaped_srt}':force_style='{style}'")
             vf_arg = ",".join(video_filters)
             
@@ -161,16 +179,11 @@ def cut_and_crop_video(
             video_filters.append(f"crop={cw}:{ih}:{x_left}:0")
             if clip_srt_path and clip_srt_path.is_file():
                 escaped_srt = escape_ffmpeg_subtitles_path(clip_srt_path)
-                style = (
-                    "Fontname=Arial,Fontsize=18,"
-                    "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-                    "Outline=2,Alignment=2,MarginV=25"
-                )
                 video_filters.append(f"subtitles='{escaped_srt}':force_style='{style}'")
             vf_arg = ",".join(video_filters)
             
         elif layout == "vertical_reels":
-            # Используем ИИ для отслеживания лица
+            # Используем ИИ (MediaPipe / Haar) для отслеживания лица
             cx = find_optimal_crop_center_x(video_path, start_sec, end_sec, ffmpeg_bin)
             if cx is None:
                 cx = int(iw / 2) # фоллбек в центр
@@ -180,11 +193,6 @@ def cut_and_crop_video(
             video_filters.append(f"crop={cw}:{ih}:{x_left}:0")
             if clip_srt_path and clip_srt_path.is_file():
                 escaped_srt = escape_ffmpeg_subtitles_path(clip_srt_path)
-                style = (
-                    "Fontname=Arial,Fontsize=18,"
-                    "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-                    "Outline=2,Alignment=2,MarginV=25"
-                )
                 video_filters.append(f"subtitles='{escaped_srt}':force_style='{style}'")
             vf_arg = ",".join(video_filters)
             
@@ -218,11 +226,6 @@ def cut_and_crop_video(
             
             if clip_srt_path and clip_srt_path.is_file():
                 escaped_srt = escape_ffmpeg_subtitles_path(clip_srt_path)
-                style = (
-                    "Fontname=Arial,Fontsize=18,"
-                    "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-                    "Outline=2,Alignment=2,MarginV=25"
-                )
                 filter_complex += f";[v_stacked]subtitles='{escaped_srt}':force_style='{style}'[v]"
             else:
                 filter_complex += f";[v_stacked]null[v]"
@@ -236,47 +239,31 @@ def cut_and_crop_video(
             video_filters.append(f"crop={cw}:{ih}:{x_left}:0")
             if clip_srt_path and clip_srt_path.is_file():
                 escaped_srt = escape_ffmpeg_subtitles_path(clip_srt_path)
-                style = (
-                    "Fontname=Arial,Fontsize=18,"
-                    "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-                    "Outline=2,Alignment=2,MarginV=25"
-                )
                 video_filters.append(f"subtitles='{escaped_srt}':force_style='{style}'")
             vf_arg = ",".join(video_filters)
             
-    # Вычисляем параметры гибридного поиска (hybrid seeking):
-    # делаем быстрый поиск на точку за 10 секунд до начала, а оставшиеся 10 секунд ищем точно.
-    if start_sec > 15.0:
-        fast_seek = start_sec - 10.0
-        accurate_seek = 10.0
-    else:
-        fast_seek = None
-        accurate_seek = start_sec
-
     duration = end_sec - start_sec
 
-    # Базовая часть команды для CPU
-    cmd_base_cpu = [ffmpeg_bin, "-y"]
-    if fast_seek is not None:
-        cmd_base_cpu.extend(["-ss", f"{fast_seek:.3f}"])
-    cmd_base_cpu.extend([
+    # Базовая часть команды для CPU с точным поиском по таймкоду (-ss до -i)
+    # Это гарантирует 100% совпадение времени клипа и субтитров без рассинхрона
+    cmd_base_cpu = [
+        ffmpeg_bin, "-y",
+        "-ss", f"{start_sec:.3f}",
         "-i", str(video_path),
-        "-ss", f"{accurate_seek:.3f}",
         "-t", f"{duration:.3f}",
-    ])
+    ]
 
     attempt_gpu = use_gpu and check_nvenc_supported(ffmpeg_bin)
     
     if attempt_gpu:
-        # Для GPU добавляем аппаратное декодирование (-hwaccel cuda)
-        cmd_gpu = [ffmpeg_bin, "-y", "-hwaccel", "cuda"]
-        if fast_seek is not None:
-            cmd_gpu.extend(["-ss", f"{fast_seek:.3f}"])
-        cmd_gpu.extend([
+        # Для GPU используем -ss до -i и аппаратное декодирование/кодирование
+        cmd_gpu = [
+            ffmpeg_bin, "-y",
+            "-ss", f"{start_sec:.3f}",
+            "-hwaccel", "cuda",
             "-i", str(video_path),
-            "-ss", f"{accurate_seek:.3f}",
             "-t", f"{duration:.3f}",
-        ])
+        ]
         
         if filter_complex:
             cmd_gpu.extend(["-filter_complex", filter_complex, "-map", "[v]", "-map", "0:a?"])
