@@ -19,7 +19,7 @@ fi
 # 2. Установка PyInstaller при необходимости
 if ! command -v pyinstaller &> /dev/null; then
     echo "[BUILD] Установка PyInstaller..."
-    pip install pyinstaller
+    pip install pyinstaller --index-url https://pypi.org/simple
 fi
 
 # 3. Сборка PyInstaller дистрибутива
