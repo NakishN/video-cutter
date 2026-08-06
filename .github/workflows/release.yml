@@ -1,9 +1,13 @@
-name: Build and Release Binaries
+name: CI & Release Build
 
 on:
   push:
+    branches: [ "main" ]
     tags:
       - 'v*'
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,14 +20,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools
           pip install -r requirements.txt
           pip install pyinstaller
 
@@ -35,7 +39,14 @@ jobs:
         run: |
           Compress-Archive -Path dist/VideoCutter/* -DestinationPath dist/VideoCutter-Windows-x64.zip
 
-      - name: Upload Release Asset
+      - name: Upload Build Artifact (Actions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoCutter-Windows-x64
+          path: dist/VideoCutter-Windows-x64.zip
+
+      - name: Upload Release Asset (GitHub Release)
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/VideoCutter-Windows-x64.zip
@@ -49,10 +60,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install System Dependencies
         run: |
@@ -61,7 +72,7 @@ jobs:
 
       - name: Install Python Dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools
           pip install -r requirements.txt
           pip install pyinstaller mediapipe
 
@@ -72,7 +83,16 @@ jobs:
           cd dist
           tar -czvf VideoCutter-Linux-x64.tar.gz VideoCutter/
 
-      - name: Upload Release Asset
+      - name: Upload Build Artifacts (Actions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoCutter-Linux-x64
+          path: |
+            dist/VideoCutter-Linux-x64.tar.gz
+            dist/VideoCutter-x86_64.AppImage
+
+      - name: Upload Release Asset (GitHub Release)
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
